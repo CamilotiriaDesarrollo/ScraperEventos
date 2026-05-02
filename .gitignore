@@ -1,0 +1,20 @@
+credentials/
+.env
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.idea/
+.vscode/
+*.log
+
+# WhatsApp Web — perfil persistente con tokens de sesión, NO subir
+wa_session/
+
+# Logs locales
+logs/
+
+# Claude Code metadata local
+.claude/
+
