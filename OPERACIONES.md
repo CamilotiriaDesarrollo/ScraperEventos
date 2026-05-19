@@ -3,16 +3,11 @@
 Guía paso a paso para repetir el proceso cada semana. Cuando algo se rompa,
 mirá la sección de troubleshooting al final.
 
-> ⚠️ **Antes que nada**: el `python` del PATH apunta al stub de Microsoft Store.
-> Siempre usar la ruta completa del Python real:
->
+> ℹ️ **Python en este equipo**: Python 3.10 instalado en:
 > ```
-> "C:\Users\ZenBook\AppData\Local\Programs\Python\Python313\python.exe"
+> C:\Users\camil\AppData\Local\Programs\Python\Python310\python.exe
 > ```
->
-> En la terminal de VS Code podés crear un alias o simplemente copiar/pegar.
-> Si en algún momento arreglás el PATH (Configuración Windows → "Alias de
-> ejecución de aplicaciones" → desactivar python.exe), todo funciona con `python`.
+> El comando `python` ya funciona directamente desde la terminal de VS Code.
 
 ---
 
@@ -212,7 +207,7 @@ sesión te queda dudosa, o para ajustar el prompt si Claude in Chrome se confund
 ### Paso 1 — Scrapear nuevos eventos
 
 ```bash
-cd c:/Users/ZenBook/Documents/scraper-eventos
+cd "c:/Users/camil/Desktop/Scrapper EVENTOS"
 python main.py
 ```
 
