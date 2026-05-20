@@ -2,11 +2,12 @@
 Genera el archivo de sesión para el scraping manual de Instagram.
 
 Uso:
-    python generar_sesion_ig.py              # 20 perfiles, umbral 7 días
-    python generar_sesion_ig.py --perfiles 30
-    python generar_sesion_ig.py --dias 14    # re-revisar perfiles de hace 2 semanas
+    python generar_sesion_ig.py           # todos los perfiles pendientes (umbral 7 días)
+    python generar_sesion_ig.py --dias 1  # forzar todos aunque sean recientes
 
-Salida: sesion_ig_hoy.md  (pégalo completo en Claude in Chrome)
+Salida: sesion_ig_hoy.md
+→ Pegalo UNA SOLA VEZ en Claude in Chrome al inicio de la semana.
+→ Luego solo decí "siguiente bloque" para continuar.
 """
 import argparse
 from datetime import datetime, timedelta
@@ -16,55 +17,68 @@ from sheets_client import get_client, get_eventos_existentes
 
 TAB_FUENTES_IG = "FUENTES_IG"
 SALIDA = Path("sesion_ig_hoy.md")
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1c8eXsUrTask4b9HT9w9TYHTP3lxsHPtrv73mTov8Wj0/edit"
+BLOQUE_SIZE = 15
 
 CATEGORIAS_VALIDAS = (
     "concierto · teatro · danza · exposición · taller · festival · fiesta · "
     "cine · gastronomía · feria · conversatorio · stand-up · lanzamiento · mercado"
 )
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1c8eXsUrTask4b9HT9w9TYHTP3lxsHPtrv73mTov8Wj0/edit"
+PROMPT = """---
 
-PROMPT_INSTRUCCIONES = """---
-
-## TU TAREA
-
-Extraer eventos culturales de los perfiles de Instagram listados arriba y registrarlos directamente en Google Sheets.
+## CONTEXTO Y REGLAS — LEÉ ANTES DE EMPEZAR
 
 **Sheet:** {sheet_url}
-**Pestaña:** EVENTOS
-**Próximo ID:** {proximo_evt}
 **Fecha de hoy:** {hoy}
+**Perfiles totales en esta sesión:** {total}
+**Tamaño de cada bloque:** {bloque_size} perfiles
 
----
+Vas a revisar los {total} perfiles de la lista de arriba en bloques de {bloque_size}.
+Procesás el primer bloque ahora. Cuando el usuario diga "siguiente bloque", continuás con los siguientes {bloque_size}, y así hasta terminar la lista completa.
 
-## REGLAS CRÍTICAS
-- NUNCA borres ni modifiques filas que ya tienen datos
+### Reglas críticas para el Sheet
+- NUNCA borres ni modifiques filas con datos
 - NUNCA uses Ctrl+A ni selecciones rangos grandes
-- SOLO escribe en filas completamente vacías
-- Usá TAB para pasar de columna, ENTER para nueva fila
+- SOLO escribí en filas completamente vacías
 
 ---
 
-## PASO 1 — Preparar el Sheet (una sola vez al inicio)
+## AL INICIO DE CADA BLOQUE — siempre hacer esto primero
 
-Abre el Sheet, ve a la pestaña EVENTOS.
-Hace scroll hasta el final y fijate en qué fila está la primera celda vacía de la columna A.
-Haz clic ahí. Esa es tu posición de escritura. No la muevas hasta terminar todos los perfiles.
+Antes de revisar Instagram, abrí el Sheet y ejecutá este script de Apps Script para saber dónde escribir:
+
+```javascript
+function getSheetState() {{
+  var ss = SpreadsheetApp.openById('{sheet_id}');
+  var eventos = ss.getSheetByName('EVENTOS');
+  var lastRow = eventos.getLastRow();
+  var nextRow = lastRow + 1;
+  var lastId = '';
+  if (lastRow > 1) {{
+    lastId = eventos.getRange(lastRow, 1).getValue();
+  }}
+  Logger.log('Proxima fila vacia: ' + nextRow);
+  Logger.log('Ultimo ID registrado: ' + lastId);
+}}
+```
+
+Ese script te dice:
+- En qué fila del Sheet escribir los eventos de este bloque
+- Cuál es el último ID (EVT...) para continuar la numeración
 
 ---
 
-## PASO 2 — Revisar cada perfil de Instagram
+## REVISAR INSTAGRAM — para cada perfil del bloque actual
 
-Para cada perfil de la lista:
-
-1. Abrilo en una pestaña nueva
-2. Mirá solo los posts de los **últimos 7 días** — no necesitás hacer scroll más abajo
-3. Para decidir si un post es evento: **mirá la imagen primero** (fecha visible, flyer, etc.). Solo abrí el post si necesitás confirmar la fecha o el lugar
+1. Abrí la URL del perfil en una pestaña nueva
+2. Mirá solo los posts de los **últimos 7 días**
+3. Para evaluar un post: **mirá la imagen primero**. Solo abrí el post si necesitás confirmar fecha o lugar
 4. Si es carrusel con varios eventos, extraé cada uno por separado
 5. Cerrá la pestaña y seguí con el siguiente
 
-**Un post ES evento válido si tiene los 3:**
-- Fecha futura específica (día concreto)
+**Post ES evento válido si tiene los 3:**
+- Fecha futura específica (día concreto, no "próximamente")
 - Lugar físico o link de transmisión
 - Nombre del evento
 
@@ -74,58 +88,92 @@ Categorías válidas: {categorias}
 
 ---
 
-## PASO 3 — Registrar cada evento en el Sheet inmediatamente
+## REGISTRAR EN EL SHEET — usar Apps Script para escribir todos los eventos del bloque de una vez
 
-Cada vez que encontrés un evento válido, volvé al Sheet y escribí en la siguiente fila vacía:
+Cuando termines de revisar los {bloque_size} perfiles del bloque, escribí todos los eventos juntos con este script. Reemplazá el array `eventos` con los datos reales:
 
-| Col | Campo | Valor |
-|-----|-------|-------|
-| A | id | {proximo_evt} (incrementar por cada evento) |
-| B | fecha_extraccion | {hoy} |
-| C | fuente_tipo | instagram |
-| D | fuente | instagram |
-| E | perfil_ig | @handle del perfil |
-| F | nombre_evento | nombre del evento |
-| G | fecha_evento | YYYY-MM-DD |
-| H | hora | HH:MM o "no especificado" |
-| I | lugar | venue o dirección |
-| J | ciudad | Bogotá o Pereira |
-| K | categoria | categoría válida |
-| L | descripcion | 1 línea del caption |
-| M | url_post | URL del post |
-| N | imagen_url | dejar vacío |
-| O | estado | pendiente |
-| P | notas | dejar vacío |
+```javascript
+function addEventosToSheet() {{
+  var ss = SpreadsheetApp.openById('{sheet_id}');
+  var sheet = ss.getSheetByName('EVENTOS');
+  var hoy = '{hoy}';
 
-Usá TAB entre columnas y ENTER al terminar cada fila.
+  var eventos = [
+    // ["EVT026", hoy, "instagram", "instagram", "@perfil", "Nombre evento", "2026-05-25", "20:00", "Venue", "Bogotá", "concierto", "Descripción", "https://instagram.com/p/...", "", "pendiente", ""],
+    // Agregá una línea por cada evento encontrado
+  ];
 
----
+  if (eventos.length === 0) {{
+    Logger.log('No hay eventos para registrar en este bloque.');
+    return;
+  }}
 
-## PASO 4 — Actualizar ultima_revision
-
-Cuando termines todos los perfiles del bloque, ve a la pestaña FUENTES_IG.
-Para cada perfil que revisaste, buscá su fila y escribí {hoy} en la columna `ultima_revision`.
-No toques ninguna otra celda de esas filas.
+  var lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow + 1, 1, eventos.length, 16).setValues(eventos);
+  Logger.log('Agregados ' + eventos.length + ' eventos desde la fila ' + (lastRow + 1));
+}}
+```
 
 ---
 
-## PASO 5 — Reportar y detenerse
+## ACTUALIZAR ULTIMA_REVISION — también con Apps Script
 
-Cuando termines el bloque completo, escribí en el chat:
+Después de escribir los eventos, actualizá los perfiles revisados en FUENTES_IG:
+
+```javascript
+function updateUltimaRevision() {{
+  var ss = SpreadsheetApp.openById('{sheet_id}');
+  var sheet = ss.getSheetByName('FUENTES_IG');
+  var hoy = '{hoy}';
+
+  // Reemplazá con los @handles del bloque que revisaste
+  var perfilesRevisados = [
+    // "@handle1", "@handle2", ...
+  ];
+
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var colPerfil = headers.indexOf('perfil');
+  var colRevision = headers.indexOf('ultima_revision');
+
+  var updates = [];
+  for (var i = 1; i < data.length; i++) {{
+    if (perfilesRevisados.indexOf(data[i][colPerfil]) !== -1) {{
+      sheet.getRange(i + 1, colRevision + 1).setValue(hoy);
+    }}
+  }}
+  Logger.log('ultima_revision actualizada para ' + perfilesRevisados.length + ' perfiles.');
+}}
+```
+
+---
+
+## AL TERMINAR CADA BLOQUE — reportar y esperar
+
+Escribí en el chat:
 
 ```
-BLOQUE COMPLETADO
-Perfiles revisados: N
-Eventos registrados: N
-Sin eventos: @handle (razón), @handle (razón)
+BLOQUE N/M COMPLETADO
+Perfiles revisados: X (perfiles #N a #M de la lista)
+Eventos registrados: X
+Sin eventos: @handle (razón breve)
 Con error: @handle (razón)
 ```
 
-Luego **detenete y esperá** la orden "siguiente bloque" antes de continuar.
+Luego **detenete y esperá** que el usuario diga "siguiente bloque".
+
+Cuando llegue "siguiente bloque":
+1. Ejecutá `getSheetState()` para ver la posición actual del Sheet
+2. Continuá con los siguientes {bloque_size} perfiles de la lista
+3. Repetí el proceso
+
+---
+
+## PRIMER BLOQUE — arrancá ahora con los perfiles #1 al #{bloque_size}
 """
 
 
-def get_fuentes_ig_pendientes(spreadsheet, max_perfiles, dias_umbral):
+def get_fuentes_ig_pendientes(spreadsheet, dias_umbral):
     ws = spreadsheet.worksheet(TAB_FUENTES_IG)
     registros = ws.get_all_records()
 
@@ -157,40 +205,40 @@ def get_fuentes_ig_pendientes(spreadsheet, max_perfiles, dias_umbral):
         candidatos.append({**r, "_prioridad": prioridad, "_fecha_rev": fecha_rev})
 
     candidatos.sort(key=lambda x: (x["_prioridad"], x["_fecha_rev"] or datetime.min.date()))
-    return candidatos[:max_perfiles]
+    return candidatos
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--perfiles", type=int, default=30, help="Número de perfiles a revisar (default: 30)")
-    parser.add_argument("--dias", type=int, default=7, help="Días mínimos desde última revisión (default: 7)")
+    parser.add_argument("--dias", type=int, default=7, help="Dias minimos desde ultima revision (default: 7)")
     args = parser.parse_args()
 
     print("Conectando al Sheet...")
     spreadsheet = get_client()
 
-    fuentes = get_fuentes_ig_pendientes(spreadsheet, args.perfiles, args.dias)
+    fuentes = get_fuentes_ig_pendientes(spreadsheet, args.dias)
     if not fuentes:
-        print("No hay perfiles pendientes de revisión (todos fueron revisados recientemente).")
+        print("No hay perfiles pendientes (todos revisados recientemente).")
         return
 
     _, ultimo_id = get_eventos_existentes(spreadsheet)
     hoy = datetime.now().strftime("%Y-%m-%d")
-    proximo_evt = f"EVT{ultimo_id + 1:03d}"
+    sheet_id = "1c8eXsUrTask4b9HT9w9TYHTP3lxsHPtrv73mTov8Wj0"
 
     lineas = [
-        f"# Sesión IG — {hoy}",
+        f"# Sesion IG — {hoy}",
         f"",
-        f"**Fecha de hoy:** {hoy}  ",
-        f"**Próximo ID de evento:** {proximo_evt}  ",
-        f"**Perfiles a revisar:** {len(fuentes)}",
+        f"**Fecha de hoy:** {hoy}",
+        f"**Perfiles pendientes:** {len(fuentes)}",
+        f"**Bloques de:** {BLOQUE_SIZE} perfiles",
+        f"**Ultimo EVT registrado:** EVT{ultimo_id:03d}",
         f"",
         f"---",
         f"",
-        f"## Perfiles a revisar",
+        f"## Lista completa de perfiles",
         f"",
-        f"| # | Fuente ID | Perfil | URL | Ciudad | Categoría | Última revisión |",
-        f"|---|-----------|--------|-----|--------|-----------|-----------------|",
+        f"| # | ID | Perfil | URL | Ciudad | Categoria | Ultima revision |",
+        f"|---|----|--------|-----|--------|-----------|-----------------|",
     ]
 
     for i, f in enumerate(fuentes, 1):
@@ -201,21 +249,24 @@ def main():
         )
 
     lineas.append("")
-    lineas.append(
-        PROMPT_INSTRUCCIONES.format(
-            hoy=hoy,
-            categorias=CATEGORIAS_VALIDAS,
-            proximo_evt=proximo_evt,
-            sheet_url=SHEET_URL,
-        )
-    )
+    lineas.append(PROMPT.format(
+        sheet_url=SHEET_URL,
+        sheet_id=sheet_id,
+        hoy=hoy,
+        total=len(fuentes),
+        bloque_size=BLOQUE_SIZE,
+        categorias=CATEGORIAS_VALIDAS,
+    ))
 
     SALIDA.write_text("\n".join(lineas), encoding="utf-8")
 
+    bloques = (len(fuentes) + BLOQUE_SIZE - 1) // BLOQUE_SIZE
     print(f"OK Archivo generado: {SALIDA}")
     print(f"   Perfiles pendientes: {len(fuentes)}")
-    print(f"   Proximo EVT ID: {proximo_evt}")
-    print(f"\n-> Abre Claude in Chrome y pega el contenido de '{SALIDA}'")
+    print(f"   Bloques necesarios:  {bloques} (de {BLOQUE_SIZE} perfiles cada uno)")
+    print(f"   Proximo EVT ID:      EVT{ultimo_id + 1:03d}")
+    print(f"\n-> Pega '{SALIDA}' en Claude in Chrome UNA SOLA VEZ.")
+    print(f"   Luego solo di 'siguiente bloque' para continuar.")
 
 
 if __name__ == "__main__":
