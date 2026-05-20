@@ -141,7 +141,8 @@ Completar todos los campos:
 | K | notas | Una línea: qué tipo de contenido publica |
 
 **Instrucción de IDs:**
-- Los IDs F001–F107 ya están en uso (F001–F054 en FUENTES_IG, F055–F107 en FUENTES_WEB)
+- Los IDs F001–F138 ya están en uso en FUENTES_IG (136 cuentas activas, filas F081 y F129 vacías)
+- Los IDs de FUENTES_WEB son independientes y están en su propia pestaña
 - Las cuentas nuevas aprobadas van desde **F200** en adelante
 - Antes de asignar, mirar el ID más alto que exista en la columna A y continuar desde ahí
 - Si el más alto es F212, el siguiente es F213
