@@ -6,6 +6,12 @@ Ejecutá esta tarea completa sin pedir confirmaciones intermedias.
 **Sheet ID:** 1c8eXsUrTask4b9HT9w9TYHTP3lxsHPtrv73mTov8Wj0
 **Fecha de hoy:** (usá la fecha real del sistema)
 
+> **PUNTO DE ARRANQUE:** ___
+> (Opcional. Dejá vacío para que el script detecte automáticamente los pendientes.
+> O escribí un @handle para que el script arranque desde ese perfil en adelante,
+> ignorando todo lo anterior en la lista aunque esté pendiente.
+> Ejemplo: `@mediatortabog`)
+
 ---
 
 ## PASO 1 — Identificar los próximos 15 perfiles a revisar
@@ -14,6 +20,10 @@ Abrí el Sheet y ejecutá este script en Apps Script (Extensiones → Apps Scrip
 
 ```javascript
 function getProximosPerfiles() {
+  // Si hay PUNTO DE ARRANQUE definido arriba, pegalo aquí (con @ incluido).
+  // Dejá vacío ('') para detección automática.
+  var ARRANCAR_DESDE = '';  // Ejemplo: '@mediatortabog'
+
   var ss = SpreadsheetApp.openById('1c8eXsUrTask4b9HT9w9TYHTP3lxsHPtrv73mTov8Wj0');
   var sheet = ss.getSheetByName('FUENTES_IG');
   var data = sheet.getDataRange().getValues();
@@ -27,15 +37,30 @@ function getProximosPerfiles() {
   var hoy = new Date();
   var umbral = new Date(hoy.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+  // Si hay punto de arranque, saltar todo lo anterior en la lista
+  var encontrado = ARRANCAR_DESDE === '';
   var pendientes = [];
+
   for (var i = 1; i < data.length; i++) {
-    var activo = String(data[i][colActivo]).trim().toLowerCase();
-    if (activo !== 'sí' && activo !== 'si') continue;
     var perfil = String(data[i][colPerfil]).trim();
     if (!perfil) continue;
+
+    // Esperar hasta encontrar el perfil de arranque
+    if (!encontrado) {
+      if (perfil.toLowerCase() === ARRANCAR_DESDE.toLowerCase()) {
+        encontrado = true;
+      } else {
+        continue;
+      }
+    }
+
+    var activo = String(data[i][colActivo]).trim().toLowerCase();
+    if (activo !== 'sí' && activo !== 'si') continue;
+
     var revision = data[i][colRevision];
     var fechaRev = revision ? new Date(revision) : null;
     if (fechaRev && fechaRev >= umbral) continue;
+
     pendientes.push({
       fila: i + 1,
       perfil: perfil,
@@ -51,6 +76,7 @@ function getProximosPerfiles() {
   var lastId = lastRow > 1 ? eventos.getRange(lastRow, 1).getValue() : 'EVT000';
 
   Logger.log('=== PROXIMOS 15 PERFILES ===');
+  if (ARRANCAR_DESDE) Logger.log('(Arrancando desde: ' + ARRANCAR_DESDE + ')');
   for (var j = 0; j < pendientes.length; j++) {
     Logger.log((j+1) + '. ' + pendientes[j].perfil + ' | ' + pendientes[j].url + ' | ' + pendientes[j].ciudad);
   }
