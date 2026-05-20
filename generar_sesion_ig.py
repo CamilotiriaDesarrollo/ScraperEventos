@@ -22,67 +22,106 @@ CATEGORIAS_VALIDAS = (
     "cine · gastronomía · feria · conversatorio · stand-up · lanzamiento · mercado"
 )
 
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1c8eXsUrTask4b9HT9w9TYHTP3lxsHPtrv73mTov8Wj0/edit"
+
 PROMPT_INSTRUCCIONES = """---
 
-## TU TAREA — LEE COMPLETO ANTES DE ABRIR INSTAGRAM
+## TU TAREA
 
-Vas a revisar los perfiles de Instagram listados arriba y extraer eventos culturales con fecha futura.
+Extraer eventos culturales de los perfiles de Instagram listados arriba y registrarlos directamente en Google Sheets.
 
-### Qué es un evento válido
-Un post es evento válido si tiene los 3:
-- Fecha futura específica (día concreto — no "próximamente", no "todos los viernes")
-- Lugar físico (venue, sala, dirección) o link de transmisión
-- Nombre o título del evento
+**Sheet:** {sheet_url}
+**Pestaña:** EVENTOS
+**Próximo ID:** {proximo_evt}
+**Fecha de hoy:** {hoy}
 
-No son eventos válidos: lifestyle · fotos de comida · frases · promociones · convocatorias · eventos privados (grados, bodas) · publicaciones de servicios sin fecha.
+---
 
-### Cómo revisar cada perfil
-1. Abre la URL del perfil en una pestaña nueva
-2. Revisa solo los posts de los **últimos 7 días**
-3. Por cada post que sea evento válido: haz clic, lee imagen y caption, anota los datos
-4. Si es carrusel con varios eventos, extrae cada uno por separado
-5. Si el perfil no carga o está privado, anótalo en `perfiles_con_error`
-6. Espera 5 segundos entre perfil y perfil
+## REGLAS CRÍTICAS
+- NUNCA borres ni modifiques filas que ya tienen datos
+- NUNCA uses Ctrl+A ni selecciones rangos grandes
+- SOLO escribe en filas completamente vacías
+- Usá TAB para pasar de columna, ENTER para nueva fila
+
+---
+
+## PASO 1 — Preparar el Sheet (una sola vez al inicio)
+
+Abre el Sheet, ve a la pestaña EVENTOS.
+Hace scroll hasta el final y fijate en qué fila está la primera celda vacía de la columna A.
+Haz clic ahí. Esa es tu posición de escritura. No la muevas hasta terminar todos los perfiles.
+
+---
+
+## PASO 2 — Revisar cada perfil de Instagram
+
+Para cada perfil de la lista:
+
+1. Abrilo en una pestaña nueva
+2. Mirá solo los posts de los **últimos 7 días** — no necesitás hacer scroll más abajo
+3. Para decidir si un post es evento: **mirá la imagen primero** (fecha visible, flyer, etc.). Solo abrí el post si necesitás confirmar la fecha o el lugar
+4. Si es carrusel con varios eventos, extraé cada uno por separado
+5. Cerrá la pestaña y seguí con el siguiente
+
+**Un post ES evento válido si tiene los 3:**
+- Fecha futura específica (día concreto)
+- Lugar físico o link de transmisión
+- Nombre del evento
+
+**NO son eventos:** lifestyle · comida · frases · promociones · convocatorias · eventos privados
 
 Categorías válidas: {categorias}
 
 ---
 
-## FORMATO DE SALIDA — MUY IMPORTANTE
+## PASO 3 — Registrar cada evento en el Sheet inmediatamente
 
-Cuando termines de revisar TODOS los perfiles, escribe en el chat UN SOLO bloque JSON con este formato exacto. No escribas nada antes del bloque, no expliques cada perfil mientras avanzas — espera al final.
+Cada vez que encontrés un evento válido, volvé al Sheet y escribí en la siguiente fila vacía:
 
-```json
-{{
-  "fecha_sesion": "{hoy}",
-  "perfiles_revisados": [
-    "@handle1",
-    "@handle2"
-  ],
-  "perfiles_sin_eventos": [
-    {{"perfil": "@handle", "razon": "solo lifestyle / inactivo / privado / sin fecha"}}
-  ],
-  "perfiles_con_error": [
-    {{"perfil": "@handle", "razon": "no cargó / cuenta eliminada"}}
-  ],
-  "eventos": [
-    {{
-      "perfil_ig": "@handle",
-      "fuente_id": "F001",
-      "nombre_evento": "Nombre del evento",
-      "fecha_evento": "YYYY-MM-DD",
-      "hora": "HH:MM o no especificado",
-      "lugar": "Nombre del venue o dirección",
-      "ciudad": "Bogotá o Pereira",
-      "categoria": "una categoría válida de la lista",
-      "descripcion": "1-2 líneas del caption",
-      "url_post": "https://www.instagram.com/p/..."
-    }}
-  ]
-}}
+| Col | Campo | Valor |
+|-----|-------|-------|
+| A | id | {proximo_evt} (incrementar por cada evento) |
+| B | fecha_extraccion | {hoy} |
+| C | fuente_tipo | instagram |
+| D | fuente | instagram |
+| E | perfil_ig | @handle del perfil |
+| F | nombre_evento | nombre del evento |
+| G | fecha_evento | YYYY-MM-DD |
+| H | hora | HH:MM o "no especificado" |
+| I | lugar | venue o dirección |
+| J | ciudad | Bogotá o Pereira |
+| K | categoria | categoría válida |
+| L | descripcion | 1 línea del caption |
+| M | url_post | URL del post |
+| N | imagen_url | dejar vacío |
+| O | estado | pendiente |
+| P | notas | dejar vacío |
+
+Usá TAB entre columnas y ENTER al terminar cada fila.
+
+---
+
+## PASO 4 — Actualizar ultima_revision
+
+Cuando termines todos los perfiles del bloque, ve a la pestaña FUENTES_IG.
+Para cada perfil que revisaste, buscá su fila y escribí {hoy} en la columna `ultima_revision`.
+No toques ninguna otra celda de esas filas.
+
+---
+
+## PASO 5 — Reportar y detenerse
+
+Cuando termines el bloque completo, escribí en el chat:
+
+```
+BLOQUE COMPLETADO
+Perfiles revisados: N
+Eventos registrados: N
+Sin eventos: @handle (razón), @handle (razón)
+Con error: @handle (razón)
 ```
 
-Si no encontraste ningún evento, igual devuelve el JSON con `"eventos": []`.
+Luego **detenete y esperá** la orden "siguiente bloque" antes de continuar.
 """
 
 
@@ -123,7 +162,7 @@ def get_fuentes_ig_pendientes(spreadsheet, max_perfiles, dias_umbral):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--perfiles", type=int, default=20, help="Número de perfiles a revisar (default: 20)")
+    parser.add_argument("--perfiles", type=int, default=30, help="Número de perfiles a revisar (default: 30)")
     parser.add_argument("--dias", type=int, default=7, help="Días mínimos desde última revisión (default: 7)")
     args = parser.parse_args()
 
@@ -163,7 +202,12 @@ def main():
 
     lineas.append("")
     lineas.append(
-        PROMPT_INSTRUCCIONES.format(hoy=hoy, categorias=CATEGORIAS_VALIDAS)
+        PROMPT_INSTRUCCIONES.format(
+            hoy=hoy,
+            categorias=CATEGORIAS_VALIDAS,
+            proximo_evt=proximo_evt,
+            sheet_url=SHEET_URL,
+        )
     )
 
     SALIDA.write_text("\n".join(lineas), encoding="utf-8")
