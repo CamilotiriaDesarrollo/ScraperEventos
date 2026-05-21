@@ -45,6 +45,15 @@ WA_CANALES = {
 # Ventana horaria local en la que el bot puede publicar (hora 24h)
 WA_VENTANA_HORARIA = (8, 22)  # 8 AM – 10 PM
 
-# Intervalo aleatorio entre publicaciones consecutivas
-WA_INTERVALO_MIN_SEC = 25 * 60  # 25 min
-WA_INTERVALO_MAX_SEC = 40 * 60  # 40 min
+# Intervalos por ciudad (segundos entre publicaciones consecutivas)
+# Bogotá: ~200-250 eventos/semana → intervalo corto para cubrir todo
+WA_INTERVALO_MIN_SEC_BOGOTA = 19 * 60   # 19 min
+WA_INTERVALO_MAX_SEC_BOGOTA = 22 * 60   # 22 min
+
+# Pereira: ~50-100 eventos/semana → intervalo más largo
+WA_INTERVALO_MIN_SEC_PEREIRA = 55 * 60  # 55 min
+WA_INTERVALO_MAX_SEC_PEREIRA = 70 * 60  # 70 min
+
+# Fallback para ciudades no configuradas
+WA_INTERVALO_MIN_SEC = 19 * 60
+WA_INTERVALO_MAX_SEC = 22 * 60
