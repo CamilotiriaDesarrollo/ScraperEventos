@@ -3,8 +3,11 @@
 Uso:
     streamlit run dashboard.py
 """
+import base64
 import html
+import random
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from urllib.parse import urlparse
 
 import streamlit as st
@@ -17,6 +20,21 @@ from sheets_client import (
 from config import TAB_EVENTOS
 
 st.set_page_config(page_title="Aprobación de eventos", layout="wide")
+
+_LOGOS_DIR = Path(__file__).parent / "assets" / "logos"
+
+def _cargar_logos_b64():
+    logos = []
+    for f in sorted(_LOGOS_DIR.glob("*.png")):
+        data = base64.b64encode(f.read_bytes()).decode()
+        logos.append(f"data:image/png;base64,{data}")
+    return logos
+
+def _logo_aleatorio(seed: str) -> str:
+    logos = _cargar_logos_b64()
+    if not logos:
+        return ""
+    return random.Random(seed).choice(logos)
 
 DIAS_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -274,6 +292,7 @@ def _render_celda_preview(spreadsheet, evento):
 
 def _preview_canal(evento):
     """Estilo Telegram/WhatsApp channel: dark bg + link preview card + caption + URL + hora."""
+    eid = str(evento.get("id", ""))
     img = (evento.get("imagen_url") or "").strip()
     titulo_raw = evento.get("nombre_evento", "").strip()
     titulo = html.escape(titulo_raw)
@@ -298,18 +317,27 @@ def _preview_canal(evento):
         except Exception:
             dominio = ""
 
-    # Imagen rectangular o placeholder
+    # Imagen rectangular o placeholder con logo Divergente
     if img.startswith("http"):
         img_block = (
             f'<img src="{html.escape(img, quote=True)}" '
             f'style="width:100%;height:170px;object-fit:cover;display:block;background:#222;">'
         )
     else:
-        img_block = (
-            '<div style="width:100%;height:170px;background:#222;display:flex;'
-            'align-items:center;justify-content:center;color:#666;font-size:12px;">'
-            'Sin imagen</div>'
-        )
+        logo_src = _logo_aleatorio(eid)
+        if logo_src:
+            img_block = (
+                f'<div style="width:100%;height:170px;background:#111;display:flex;'
+                f'align-items:center;justify-content:center;">'
+                f'<img src="{logo_src}" style="height:120px;width:120px;object-fit:contain;opacity:0.85;">'
+                f'</div>'
+            )
+        else:
+            img_block = (
+                '<div style="width:100%;height:170px;background:#222;display:flex;'
+                'align-items:center;justify-content:center;color:#666;font-size:12px;">'
+                'Sin imagen</div>'
+            )
 
     # === CARD PREVIEW DE LINK (lo que IG/WA renderiza al detectar la URL) ===
     # Solo título + bajada corta + dominio. Estilo Open Graph.

@@ -1,3 +1,4 @@
+import argparse
 import logging
 import time
 from datetime import datetime
@@ -90,6 +91,10 @@ def get_scraper_for_fuente(fuente):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ciudad", choices=["Bogotá", "Bogota", "Pereira"], help="Filtrar por ciudad")
+    args = parser.parse_args()
+
     hora_inicio = datetime.now()
     logger.info("=" * 60)
     logger.info("INICIO DE SESION DE SCRAPING WEB")
@@ -99,6 +104,10 @@ def main():
     spreadsheet = get_client()
 
     fuentes = get_fuentes_web_activas(spreadsheet, incluir_js=True)
+    if args.ciudad:
+        ciudad_filtro = args.ciudad.lower().replace("bogota", "bogotá")
+        fuentes = [f for f in fuentes if f.get("ciudad", "").strip().lower() == ciudad_filtro]
+        logger.info(f"Filtro ciudad: {args.ciudad}")
     logger.info(f"Fuentes activas: {len(fuentes)}")
 
     hashes_existentes, ultimo_id = get_eventos_existentes(spreadsheet)

@@ -14,7 +14,7 @@ Ejecutá esta tarea completa sin pedir confirmaciones intermedias.
 
 ---
 
-## PASO 1 — Identificar los próximos 15 perfiles a revisar
+## PASO 1 — Identificar los próximos 10 perfiles a revisar
 
 Abrí el Sheet y ejecutá este script en Apps Script (Extensiones → Apps Script):
 
@@ -68,14 +68,14 @@ function getProximosPerfiles() {
       ciudad: String(data[i][colCiudad]).trim(),
       revision: revision || 'nunca'
     });
-    if (pendientes.length === 15) break;
+    if (pendientes.length === 10) break;
   }
 
   var eventos = ss.getSheetByName('EVENTOS');
   var lastRow = eventos.getLastRow();
   var lastId = lastRow > 1 ? eventos.getRange(lastRow, 1).getValue() : 'EVT000';
 
-  Logger.log('=== PROXIMOS 15 PERFILES ===');
+  Logger.log('=== PROXIMOS 10 PERFILES ===');
   if (ARRANCAR_DESDE) Logger.log('(Arrancando desde: ' + ARRANCAR_DESDE + ')');
   for (var j = 0; j < pendientes.length; j++) {
     Logger.log((j+1) + '. ' + pendientes[j].perfil + ' | ' + pendientes[j].url + ' | ' + pendientes[j].ciudad);
@@ -112,7 +112,7 @@ Para cada perfil del log:
 
 ## PASO 3 — Escribir los eventos en el Sheet
 
-Cuando termines los 15 perfiles, escribí todos los eventos de una vez con Apps Script:
+Cuando termines los 10 perfiles, escribí todos los eventos de una vez con Apps Script:
 
 ```javascript
 function addEventosToSheet() {
