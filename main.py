@@ -8,6 +8,8 @@ from config import DELAY_BETWEEN_REQUESTS, TAB_EVENTOS
 from deduplicator import deduplicar_por_titulo_en_sheet, es_duplicado, generar_hash
 from scrapers.sitios.biblored import BibloRedScraper
 from scrapers.sitios.bogota_agenda import BogotaAgendaScraper
+from scrapers.sitios.camarapereira import CamaraPereiraScraper
+from scrapers.sitios.expofuturo import ExpoFuturoScraper
 from scrapers.sitios.cinemateca import CinematecaScraper
 from scrapers.sitios.comfamiliar import ComfamiliarScraper
 from scrapers.sitios.culturarecreacion import CulturaRecreacionScraper
@@ -71,6 +73,8 @@ def _filtrar_y_normalizar_ciudades(eventos):
 
 
 SCRAPER_MAP = {
+    "camarapereira.org.co": CamaraPereiraScraper,
+    "expofuturo.com": ExpoFuturoScraper,
     "idartes.gov.co": IdArtesScraper,
     "plancpereira.com": PlanCPereiraScraper,
     "teatromayor.org": TeatroMayorScraper,
