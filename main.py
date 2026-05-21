@@ -8,6 +8,9 @@ from config import DELAY_BETWEEN_REQUESTS, TAB_EVENTOS
 from deduplicator import deduplicar_por_titulo_en_sheet, es_duplicado, generar_hash
 from scrapers.sitios.biblored import BibloRedScraper
 from scrapers.sitios.bogota_agenda import BogotaAgendaScraper
+from scrapers.sitios.cinemateca import CinematecaScraper
+from scrapers.sitios.eneldelia import EnDeldiaScraper
+from scrapers.sitios.teatronacional import TeatroNacionalScraper
 from scrapers.sitios.eticketablanca import eTicketablancaScraper
 from scrapers.sitios.eventbrite import EventbriteScraper
 from scrapers.sitios.fever import FeverScraper
@@ -78,6 +81,9 @@ SCRAPER_MAP = {
     "planetariodebogota.gov.co": PlanetarioScraper,
     "visitbogota.co": VisitBogotaScraper,
     "fuga.gov.co": FugaScraper,
+    "cinematecadebogota.gov.co": CinematecaScraper,
+    "eneldelia.gov.co": EnDeldiaScraper,
+    "teatronacional.co": TeatroNacionalScraper,
 }
 
 
