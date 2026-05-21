@@ -9,6 +9,7 @@ from deduplicator import deduplicar_por_titulo_en_sheet, es_duplicado, generar_h
 from scrapers.sitios.biblored import BibloRedScraper
 from scrapers.sitios.bogota_agenda import BogotaAgendaScraper
 from scrapers.sitios.camarapereira import CamaraPereiraScraper
+from scrapers.sitios.coliseomedplus import ColiseoMedPlusScraper
 from scrapers.sitios.expofuturo import ExpoFuturoScraper
 from scrapers.sitios.cinemateca import CinematecaScraper
 from scrapers.sitios.comfamiliar import ComfamiliarScraper
@@ -17,6 +18,7 @@ from scrapers.sitios.distritoch import DistritoCHScraper
 from scrapers.sitios.eneldelia import EnDeldiaScraper
 from scrapers.sitios.eventario import EventarioScraper
 from scrapers.sitios.maloka import MalokaScraper
+from scrapers.sitios.museodeartepereira import MuseoArtePereiraScraper
 from scrapers.sitios.masartemasciudad import MasArteMasCiudadScraper
 from scrapers.sitios.teatronacional import TeatroNacionalScraper
 from scrapers.sitios.eticketablanca import eTicketablancaScraper
@@ -75,7 +77,9 @@ def _filtrar_y_normalizar_ciudades(eventos):
 
 SCRAPER_MAP = {
     "camarapereira.org.co": CamaraPereiraScraper,
+    "coliseomedplus.com": ColiseoMedPlusScraper,
     "expofuturo.com": ExpoFuturoScraper,
+    "museodeartedepereira.com": MuseoArtePereiraScraper,
     "idartes.gov.co": IdArtesScraper,
     "plancpereira.com": PlanCPereiraScraper,
     "teatromayor.org": TeatroMayorScraper,
