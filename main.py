@@ -11,6 +11,7 @@ from scrapers.sitios.bogota_agenda import BogotaAgendaScraper
 from scrapers.sitios.cinemateca import CinematecaScraper
 from scrapers.sitios.comfamiliar import ComfamiliarScraper
 from scrapers.sitios.culturarecreacion import CulturaRecreacionScraper
+from scrapers.sitios.distritoch import DistritoCHScraper
 from scrapers.sitios.eneldelia import EnDeldiaScraper
 from scrapers.sitios.maloka import MalokaScraper
 from scrapers.sitios.teatronacional import TeatroNacionalScraper
@@ -87,6 +88,7 @@ SCRAPER_MAP = {
     "cinematecadebogota.gov.co": CinematecaScraper,
     "comfamiliar.com": ComfamiliarScraper,
     "culturarecreacionydeporte.gov.co": CulturaRecreacionScraper,
+    "distritoch.com": DistritoCHScraper,
     "eneldelia.gov.co": EnDeldiaScraper,
     "maloka.org": MalokaScraper,
     "teatronacional.co": TeatroNacionalScraper,
