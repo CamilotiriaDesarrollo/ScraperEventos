@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import DELAY_BETWEEN_REQUESTS, TAB_EVENTOS
+from curar_eventos import curar_eventos, renumerar_ids_eventos
 from deduplicator import deduplicar_por_titulo_en_sheet, es_duplicado, generar_hash
 from scrapers.sitios.biblored import BibloRedScraper
 from scrapers.sitios.bogota_agenda import BogotaAgendaScraper
@@ -235,6 +236,28 @@ def main():
         logger.error(f"Dedup global fallo: {exc}")
         stats_dedup = {"filas_borradas": 0, "grupos_duplicados": 0}
 
+    # Curaduría: elimina eventos de ciudad errónea, idioma no español y online sin contexto
+    logger.info("Curando eventos (ciudad errónea / idioma / online sin contexto)...")
+    try:
+        stats_curado = curar_eventos(spreadsheet)
+        logger.info(
+            f"Curaduria: {stats_curado['ciudad_erronea']} ciudad erronea · "
+            f"{stats_curado['idioma_no_espanol']} idioma · "
+            f"{stats_curado['online_sin_contexto']} online sin contexto · "
+            f"Total: {stats_curado['total_borrados']} borrados"
+        )
+    except Exception as exc:
+        logger.error(f"Curaduria fallo: {exc}")
+        stats_curado = {"ciudad_erronea": 0, "idioma_no_espanol": 0,
+                        "online_sin_contexto": 0, "total_borrados": 0}
+
+    # Renumera IDs EVT001, EVT002… después de todas las eliminaciones
+    logger.info("Renumerando IDs de eventos...")
+    try:
+        renumerar_ids_eventos(spreadsheet)
+    except Exception as exc:
+        logger.error(f"Renumeracion de IDs fallo: {exc}")
+
     escribir_log(spreadsheet, {
         "flujo": "web",
         "fecha_sesion": hora_inicio.strftime("%Y-%m-%d"),
@@ -243,11 +266,16 @@ def main():
         "duracion_min": duracion,
         "fuentes_revisadas": fuentes_revisadas,
         "eventos_nuevos": total_nuevos,
-        "eventos_omitidos": total_omitidos + stats_dedup["filas_borradas"],
+        "eventos_omitidos": (
+            total_omitidos
+            + stats_dedup["filas_borradas"]
+            + stats_curado["total_borrados"]
+        ),
         "fuentes_con_error": ", ".join(fuentes_con_error) or "ninguna",
         "notas": (
             f"Sin scraper: {len(fuentes_sin_scraper)} fuentes · "
-            f"Dedup global: {stats_dedup['filas_borradas']} borrados"
+            f"Dedup: {stats_dedup['filas_borradas']} borrados · "
+            f"Curaduria: {stats_curado['total_borrados']} borrados"
         ),
     })
 
