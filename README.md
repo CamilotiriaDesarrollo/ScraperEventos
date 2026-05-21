@@ -5,27 +5,31 @@ y los publica automáticamente a canales de WhatsApp con cadencia humana.
 
 ## Estado actual
 
-- **20 scrapers** funcionando (10 estáticos + 6 con Playwright para sitios JS)
-- **~395 eventos curables** en el Sheet (Bogotá, Pereira y online)
+- **28 scrapers** funcionando (10 estáticos + 18 con Playwright para sitios JS)
+- **35 fuentes activas** en FUENTES_WEB + 136 cuentas de Instagram en FUENTES_IG
+- **1.009 eventos** en el Sheet (EVT001–EVT1009) · 696 Bogotá · 312 Pereira
+- **860 eventos futuros** disponibles → ~41 semanas de contenido a 3 posts/día
+- **Pipeline de curaduría automática** al final de cada scraping (ciudad errónea, idioma, online sin contexto)
 - **Dashboard de curación** con vista previa estilo canal de WhatsApp
 - **Bot publicador** validado contra canal de prueba
 
-Falta: crear canales de producción y migrar la publicación del canal TEST a esos.
+Falta: crear canales de producción en WhatsApp y aprobar el backlog inicial desde el dashboard.
 
-## Las 5 fases del proyecto
+## Las 6 fases del proyecto
 
 | Fase | Estado | Qué hace |
 |---|---|---|
 | 0. Definición | ✅ | Plan, columnas del Sheet, ciudades objetivo |
-| 1. Base de fuentes | ✅ | 107 fuentes en `FUENTES_WEB` |
-| 2. Flujo IG (Claude Chrome) | ✅ | 78 eventos cargados manualmente desde IG |
-| 3. Bot WEB de scraping | ✅ | `main.py` corre 20 scrapers, dedup global, filtro Bogotá/Pereira |
-| 4. Dashboard de aprobación | ✅ | `dashboard.py` con preview estilo canal y filtros por fecha/ciudad/categoría |
+| 1. Base de fuentes | ✅ | 35 fuentes WEB activas (limpias) + 136 IG |
+| 2. Flujo IG (Claude Chrome) | ✅ | 162 eventos desde Instagram vía sesiones manuales |
+| 3. Bot WEB de scraping | ✅ | `main.py` corre 28 scrapers, dedup global, curaduría, renumeración IDs |
+| 4. Dashboard de aprobación | ✅ | `dashboard.py` con preview estilo canal y filtros |
 | 5. Bot publicador WhatsApp | ✅ (validado en TEST) | `bot_publicador.py` con orden por fecha y cadencia 25-40 min |
+| 6. Curaduría y limpieza | ✅ | `curar_eventos.py` + `limpiar_fuentes.py` + `reporte_semanal.py` |
 
 ## Stack
 
-- **Python 3.13** (instalado en `C:\Users\ZenBook\AppData\Local\Programs\Python\Python313\`)
+- **Python 3.10** (instalado en `C:\Users\camil\AppData\Local\Programs\Python\Python310\`)
 - `requests` + `beautifulsoup4` + `lxml` para HTML estático
 - `playwright` (Chromium headless) para sitios JS y para WhatsApp Web
 - `gspread` + Google Service Account para leer/escribir el Sheet
@@ -55,16 +59,29 @@ scraper-eventos/
 │       ├── bogota_agenda.py
 │       ├── teatromayor.py
 │       ├── teatrolibre.py
+│       ├── teatronacional.py     # Playwright — 61 eventos
 │       ├── tuboleta.py           # Playwright
 │       ├── eventbrite.py         # Playwright
 │       ├── fever.py              # Playwright (parsea JSON de astro-island)
 │       ├── latiquetera.py        # Playwright
-│       ├── eticketablanca.py     # Playwright (213 eventos)
+│       ├── eticketablanca.py     # Playwright (182 eventos)
 │       ├── taquillalive.py       # Playwright
 │       ├── biblored.py
 │       ├── planetario.py
 │       ├── visitbogota.py
-│       └── fuga.py               # Playwright
+│       ├── fuga.py               # Playwright
+│       ├── cinemateca.py
+│       ├── comfamiliar.py        # Pereira
+│       ├── culturarecreacion.py
+│       ├── distritoch.py         # Playwright — Chapinero
+│       ├── eneldelia.py          # CN Artes Delia Zapata
+│       ├── eventario.py          # Playwright — Bogotá + Pereira (paginación por click)
+│       ├── maloka.py
+│       ├── masartemasciudad.py   # Playwright — Tribe Events Calendar
+│       ├── camarapereira.py      # Pereira
+│       ├── expofuturo.py         # Pereira
+│       ├── coliseomedplus.py     # Playwright — conciertos grandes
+│       └── museodeartepereira.py # Pereira
 │
 ├── credentials/
 │   └── service-account.json      # Credenciales Google (gitignored)
@@ -79,20 +96,26 @@ scraper-eventos/
 ├── requirements.txt
 ├── run_scraper.bat               # Wrapper para Task Scheduler
 ├── install_scheduled_task.ps1    # Registra tarea diaria 08:00 AM
-└── OPERACIONES.md                # Paso a paso semanal recurrente
+├── curar_eventos.py              # Curaduría: ciudad errónea, idioma, online sin contexto
+├── limpiar_fuentes.py            # Limpia fuentes no viables de FUENTES_WEB
+├── reporte_semanal.py            # Estado del Sheet + proyección de eventos por semana
+├── OPERACIONES.md                # Paso a paso semanal recurrente
+├── FLUJO_PUBLICACION.md          # Arquitectura del ciclo scraping → publicación
+└── HISTORIAL.md                  # Registro cronológico completo del proyecto
 ```
 
 ## Comandos principales
 
 | Necesidad | Comando |
 |---|---|
-| Scrapear todo (modo manual) | `python main.py` |
-| Curar eventos | `streamlit run dashboard.py` |
+| Scrapear todo (incluye curaduría) | `python main.py` |
+| Ver estado del Sheet y proyección semanal | `python reporte_semanal.py` |
+| Curaduría manual sin scraping | `python curar_eventos.py` |
+| Curar/aprobar en el dashboard | `streamlit run dashboard.py` |
 | Probar caption sin publicar | `python bot_publicador.py --canal TEST --ciudad Bogotá --una-sola --dry-run --ignorar-ventana` |
 | Publicar 1 evento al canal TEST | `python bot_publicador.py --canal TEST --ciudad Bogotá --una-sola --ignorar-ventana` |
-| Modo cola completo | `python bot_publicador.py --canal Bogotá --ciudad Bogotá` |
+| Modo cola completo | `python bot_publicador.py --canal "Eventos Bogotá" --ciudad Bogotá` |
 | Setup QR de WhatsApp Web | `python whatsapp_publisher.py --setup` |
-| Re-correr dedup global manualmente | ver `OPERACIONES.md` |
 
 ## Setup desde cero (si quisieras instalar en otra máquina)
 
