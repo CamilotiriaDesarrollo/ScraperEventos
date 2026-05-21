@@ -15,6 +15,7 @@ from scrapers.sitios.comfamiliar import ComfamiliarScraper
 from scrapers.sitios.culturarecreacion import CulturaRecreacionScraper
 from scrapers.sitios.distritoch import DistritoCHScraper
 from scrapers.sitios.eneldelia import EnDeldiaScraper
+from scrapers.sitios.eventario import EventarioScraper
 from scrapers.sitios.maloka import MalokaScraper
 from scrapers.sitios.masartemasciudad import MasArteMasCiudadScraper
 from scrapers.sitios.teatronacional import TeatroNacionalScraper
@@ -95,6 +96,7 @@ SCRAPER_MAP = {
     "culturarecreacionydeporte.gov.co": CulturaRecreacionScraper,
     "distritoch.com": DistritoCHScraper,
     "eneldelia.gov.co": EnDeldiaScraper,
+    "eventario.co": EventarioScraper,
     "maloka.org": MalokaScraper,
     "masartemasciudad.com": MasArteMasCiudadScraper,
     "teatronacional.co": TeatroNacionalScraper,
