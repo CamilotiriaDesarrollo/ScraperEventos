@@ -9,7 +9,10 @@ from deduplicator import deduplicar_por_titulo_en_sheet, es_duplicado, generar_h
 from scrapers.sitios.biblored import BibloRedScraper
 from scrapers.sitios.bogota_agenda import BogotaAgendaScraper
 from scrapers.sitios.cinemateca import CinematecaScraper
+from scrapers.sitios.comfamiliar import ComfamiliarScraper
+from scrapers.sitios.culturarecreacion import CulturaRecreacionScraper
 from scrapers.sitios.eneldelia import EnDeldiaScraper
+from scrapers.sitios.maloka import MalokaScraper
 from scrapers.sitios.teatronacional import TeatroNacionalScraper
 from scrapers.sitios.eticketablanca import eTicketablancaScraper
 from scrapers.sitios.eventbrite import EventbriteScraper
@@ -82,7 +85,10 @@ SCRAPER_MAP = {
     "visitbogota.co": VisitBogotaScraper,
     "fuga.gov.co": FugaScraper,
     "cinematecadebogota.gov.co": CinematecaScraper,
+    "comfamiliar.com": ComfamiliarScraper,
+    "culturarecreacionydeporte.gov.co": CulturaRecreacionScraper,
     "eneldelia.gov.co": EnDeldiaScraper,
+    "maloka.org": MalokaScraper,
     "teatronacional.co": TeatroNacionalScraper,
 }
 
