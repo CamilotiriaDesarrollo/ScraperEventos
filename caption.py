@@ -37,54 +37,6 @@ def _fecha_amigable(fecha_iso):
     return f"{DIAS_ES[d.weekday()]} {d.day} de {MESES_ES[d.month - 1]}"
 
 
-def generar_caption_alerta(evento):
-    """Copy de urgencia para el día del evento (estado alerta_hoy).
-
-    Formato:
-        🔴 HOY 🎭
-        *Título*
-        📅 Hoy, Viernes 5 de junio · 🕐 8:00 PM
-        📍 Lugar, Ciudad
-        ¡Últimas horas para conseguir tu entrada!
-        No te lo pierdas 👇
-        🔗 URL
-    """
-    titulo = (evento.get("nombre_evento") or "").strip()
-    cat = (evento.get("categoria") or "").strip()
-    hora = (evento.get("hora") or "").strip()
-    lugar = (evento.get("lugar") or "").strip()
-    ciudad = (evento.get("ciudad") or "").strip()
-    url = (evento.get("url_post") or "").strip()
-
-    emoji = EMOJI_CATEGORIA.get(cat.lower(), "📣")
-    hoy = datetime.now()
-    fecha_str = f"{DIAS_ES[hoy.weekday()]} {hoy.day} de {MESES_ES[hoy.month - 1]}"
-
-    lineas = [f"🔴 HOY {emoji}", "", f"*{titulo}*", ""]
-
-    if hora and hora.lower() != "no especificado":
-        lineas.append(f"📅 Hoy, {fecha_str} · 🕐 {hora}")
-    else:
-        lineas.append(f"📅 Hoy, {fecha_str}")
-
-    if lugar:
-        ubic = lugar
-        if ciudad and ciudad.lower() not in lugar.lower():
-            ubic += f", {ciudad}"
-        lineas.append(f"📍 {ubic}")
-    elif ciudad:
-        lineas.append(f"📍 {ciudad}")
-
-    lineas.extend(["", "¡Últimas horas para conseguir tu entrada!", "No te lo pierdas 👇"])
-
-    if url:
-        lineas.extend(["", f"🔗 {url}"])
-
-    while lineas and lineas[-1] == "":
-        lineas.pop()
-
-    return "\n".join(lineas)
-
 
 def generar_caption(evento):
     """Devuelve el texto listo para enviar a WhatsApp.

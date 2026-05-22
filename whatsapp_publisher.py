@@ -35,18 +35,28 @@ USER_DATA_DIR = WA_SESSION_DIR / "user-data"
 def _abrir_contexto(playwright, headless):
     """Lanza Chromium con user_data_dir persistente. Preserva IndexedDB de WA Web."""
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Perfil Chromium: {USER_DATA_DIR}")
     context = playwright.chromium.launch_persistent_context(
         user_data_dir=str(USER_DATA_DIR),
         headless=headless,
         user_agent=USER_AGENT,
         locale="es-CO",
         viewport={"width": 1280, "height": 900},
+        args=[
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--no-first-run",
+            "--disable-blink-features=AutomationControlled",
+        ],
+        ignore_default_args=["--enable-automation"],
     )
     page = context.pages[0] if context.pages else context.new_page()
     return context, page
 
 
-def _esperar_app_cargada(page, timeout_ms=45000):
+def _esperar_app_cargada(page, timeout_ms=90000):
     """Espera a que WhatsApp Web salga de la pantalla de carga inicial."""
     selectores_app = [
         "#pane-side",

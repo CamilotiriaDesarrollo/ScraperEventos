@@ -46,7 +46,7 @@ def get_eventos_existentes(spreadsheet):
         lugar = str(r.get("lugar", "")).strip().lower()
         if nombre:
             hashes.add(f"{nombre}|{fecha}|{lugar}")
-        id_str = str(r.get("id", "")).strip()
+        id_str = str(r.get("byil", r.get("id", ""))).strip()
         if id_str.startswith("EVT"):
             try:
                 ultimo_id = max(ultimo_id, int(id_str.replace("EVT", "")))
@@ -134,7 +134,7 @@ def actualizar_eventos_en_lote(spreadsheet, updates_por_id):
     registros = ws.get_all_records()
     fila_por_id = {}
     for idx, r in enumerate(registros, start=2):
-        eid = str(r.get("id", "")).strip()
+        eid = str(r.get("byil", r.get("id", ""))).strip()
         if eid:
             fila_por_id[eid] = idx
 

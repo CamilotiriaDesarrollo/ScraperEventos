@@ -23,6 +23,9 @@ st.set_page_config(page_title="Aprobación de eventos", layout="wide")
 
 _LOGOS_DIR = Path(__file__).parent / "assets" / "logos"
 
+_ESTADOS_PENDIENTES = {"pendiente", "activo", "confirmado"}
+
+
 def _cargar_logos_b64():
     logos = []
     for f in sorted(_LOGOS_DIR.glob("*.png")):
@@ -35,6 +38,7 @@ def _logo_aleatorio(seed: str) -> str:
     if not logos:
         return ""
     return random.Random(seed).choice(logos)
+
 
 DIAS_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -58,6 +62,10 @@ EMOJI_CATEGORIA = {
 }
 
 
+def _eid(evento):
+    return str(evento.get("byil", evento.get("id", ""))).strip()
+
+
 @st.cache_resource
 def conectar():
     return get_client()
@@ -73,11 +81,12 @@ def cargar_eventos(spreadsheet, estado_filtro):
     registros = _cargar_todos(spreadsheet)
     if estado_filtro == "todos":
         return registros
+    if estado_filtro == "pendiente":
+        return [r for r in registros if str(r.get("estado", "")).strip().lower() in _ESTADOS_PENDIENTES]
     return [r for r in registros if str(r.get("estado", "")).strip().lower() == estado_filtro]
 
 
 def _setear_rango_fechas(desde, hasta):
-    """Callback para botones de rango rápido — actualiza ambos date_inputs."""
     st.session_state["fecha_desde"] = desde
     st.session_state["fecha_hasta"] = hasta
 
@@ -118,7 +127,6 @@ def main():
     hoy = date.today()
     default_hasta = hoy + timedelta(days=14)
 
-    # Inicializar session_state la primera vez
     if "fecha_desde" not in st.session_state:
         st.session_state["fecha_desde"] = hoy
     if "fecha_hasta" not in st.session_state:
@@ -194,7 +202,7 @@ def main():
     sidebar.markdown("---")
     sidebar.metric("Eventos en vista", len(eventos))
 
-    pendientes = [e for e in eventos if str(e.get("estado", "")).strip().lower() == "pendiente"]
+    pendientes = [e for e in eventos if str(e.get("estado", "")).strip().lower() in _ESTADOS_PENDIENTES]
     if pendientes:
         sidebar.markdown("**🚀 Acciones masivas**")
         confirmar = sidebar.checkbox(
@@ -207,7 +215,11 @@ def main():
             width="stretch",
             disabled=not confirmar,
         ):
-            updates = {str(e.get("id")): {"estado": "aprobado"} for e in pendientes if e.get("id")}
+            updates = {
+                _eid(e): {"estado": "aprobado"}
+                for e in pendientes
+                if _eid(e)
+            }
             n = actualizar_eventos_en_lote(spreadsheet, updates)
             _cargar_todos.clear()
             st.session_state["confirm_aprobar_todos"] = False
@@ -227,7 +239,6 @@ def main():
         for evento in eventos:
             _render_card_curaduria(spreadsheet, evento)
     else:
-        # Grilla de 3 columnas
         for i in range(0, len(eventos), 3):
             cols = st.columns(3, gap="small")
             for j, col in enumerate(cols):
@@ -237,7 +248,7 @@ def main():
 
 
 def _render_card_curaduria(spreadsheet, evento):
-    eid = str(evento.get("id", ""))
+    eid = _eid(evento)
     nombre = evento.get("nombre_evento", "(sin nombre)")
     estado = str(evento.get("estado", "")).strip().lower() or "pendiente"
     color_estado = {"pendiente": "🟡", "aprobado": "🟢", "publicado": "🔵", "rechazado": "🔴"}.get(estado, "⚪")
@@ -280,154 +291,132 @@ def _render_card_curaduria(spreadsheet, evento):
 
 
 def _render_celda_preview(spreadsheet, evento):
-    eid = str(evento.get("id", ""))
+    eid = _eid(evento)
     estado = str(evento.get("estado", "")).strip().lower() or "pendiente"
-
     color_estado = {"pendiente": "🟡", "aprobado": "🟢", "publicado": "🔵", "rechazado": "🔴"}.get(estado, "⚪")
     st.caption(f"{color_estado} `{eid}` · {estado}")
-
-    _preview_canal(evento)
+    _preview_canal_compacto(evento)
     _botones_acciones(spreadsheet, eid, estado, ancho=2)
 
 
-def _preview_canal(evento):
-    """Estilo Telegram/WhatsApp channel: dark bg + link preview card + caption + URL + hora."""
-    eid = str(evento.get("id", ""))
+def _preview_canal_compacto(evento):
+    """Card compacta estilo WhatsApp: thumbnail lateral + info + URL."""
+    eid = _eid(evento)
     img = (evento.get("imagen_url") or "").strip()
     titulo_raw = evento.get("nombre_evento", "").strip()
     titulo = html.escape(titulo_raw)
     cat_raw = (evento.get("categoria") or "").strip()
-    cat_pill = html.escape(cat_raw.capitalize()) if cat_raw else ""
     emoji = _emoji_para(cat_raw)
+    cat_pill = html.escape(cat_raw.capitalize()) if cat_raw else ""
     fecha_str = _fecha_amigable(evento.get("fecha_evento", ""))
     fecha = html.escape(fecha_str)
-    hora = html.escape(evento.get("hora", "").strip())
+    hora_raw = evento.get("hora", "").strip()
+    hora = html.escape(hora_raw) if hora_raw.lower() not in ("no especificado", "") else ""
     lugar_raw = evento.get("lugar", "").strip()
-    lugar = html.escape(lugar_raw)
     ciudad_raw = evento.get("ciudad", "").strip()
-    ciudad = html.escape(ciudad_raw)
     desc_raw = (evento.get("descripcion") or "").strip()
     notas_raw = (evento.get("notas") or "").strip()
     url = (evento.get("url_post") or "").strip()
 
-    dominio = ""
-    if url:
-        try:
-            dominio = urlparse(url).netloc.replace("www.", "")
-        except Exception:
-            dominio = ""
-
-    # Imagen rectangular o placeholder con logo Divergente
+    # Thumbnail
     if img.startswith("http"):
         img_block = (
             f'<img src="{html.escape(img, quote=True)}" '
-            f'style="width:100%;height:170px;object-fit:cover;display:block;background:#222;">'
+            f'style="width:68px;height:86px;object-fit:cover;border-radius:7px;flex-shrink:0;">'
         )
     else:
         logo_src = _logo_aleatorio(eid)
         if logo_src:
             img_block = (
-                f'<div style="width:100%;height:170px;background:#111;display:flex;'
-                f'align-items:center;justify-content:center;">'
-                f'<img src="{logo_src}" style="height:120px;width:120px;object-fit:contain;opacity:0.85;">'
+                f'<div style="width:68px;height:86px;background:#1A1A1A;border-radius:7px;'
+                f'display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+                f'<img src="{logo_src}" style="width:50px;height:50px;object-fit:contain;opacity:0.8;">'
                 f'</div>'
             )
         else:
             img_block = (
-                '<div style="width:100%;height:170px;background:#222;display:flex;'
-                'align-items:center;justify-content:center;color:#666;font-size:12px;">'
-                'Sin imagen</div>'
+                '<div style="width:68px;height:86px;background:#1A1A1A;border-radius:7px;'
+                'display:flex;align-items:center;justify-content:center;'
+                'color:#555;font-size:22px;flex-shrink:0;">🗓️</div>'
             )
 
-    # === CARD PREVIEW DE LINK (lo que IG/WA renderiza al detectar la URL) ===
-    # Solo título + bajada corta + dominio. Estilo Open Graph.
-    titulo_card = titulo_raw[:65] + ("..." if len(titulo_raw) > 65 else "")
-    bajada_card = ""
-    if desc_raw:
-        bajada_card = desc_raw[:90] + ("..." if len(desc_raw) > 90 else "")
-    elif lugar_raw:
-        bajada_card = f"En {lugar_raw}" + (f", {ciudad_raw}" if ciudad_raw else "")
-    else:
-        bajada_card = "Más información en el sitio."
-
-    # === BODY DEL MENSAJE (lo que el canal "escribe") ===
-    # Header: hashtag + emoji
-    body_lines = []
+    # Categoría
+    cat_line = ""
     if cat_pill:
-        body_lines.append(
-            f'<span style="font-weight:700;color:#FFF;">#{cat_pill}</span> {emoji}'
+        cat_line = (
+            f'<div style="font-size:10px;color:#4FC76A;font-weight:600;'
+            f'margin-bottom:3px;letter-spacing:0.3px;">#{cat_pill} {emoji}</div>'
         )
 
-    # Título destacado
-    body_lines.append(f'<span style="font-weight:700;color:#FFF;font-size:13.5px;">{titulo}</span>')
-
-    # Bloque de datos clave (1-2 líneas)
-    info_lines = []
+    # Fecha / hora
+    dt_parts = []
     if fecha and hora:
-        info_lines.append(f"📅 {fecha} · 🕐 {hora}")
+        dt_parts.append(f"📅 {fecha} · 🕐 {hora}")
     elif fecha:
-        info_lines.append(f"📅 {fecha}")
+        dt_parts.append(f"📅 {fecha}")
     elif hora:
-        info_lines.append(f"🕐 {hora}")
+        dt_parts.append(f"🕐 {hora}")
+
+    # Lugar
+    ubic = ""
     if lugar_raw:
-        ubic = lugar
+        ubic = html.escape(lugar_raw)
         if ciudad_raw and ciudad_raw.lower() not in lugar_raw.lower():
-            ubic += f", {ciudad}"
-        info_lines.append(f"📍 {ubic}")
+            ubic += f", {html.escape(ciudad_raw)}"
     elif ciudad_raw:
-        info_lines.append(f"📍 {ciudad}")
-    if info_lines:
-        body_lines.append("<br>".join(info_lines))
+        ubic = html.escape(ciudad_raw)
 
-    # Descripción (~250 chars máx)
+    meta_lines = ""
+    if dt_parts:
+        meta_lines += f'<div style="font-size:11px;color:#B0B3B8;margin-top:3px;">{dt_parts[0]}</div>'
+    if ubic:
+        meta_lines += f'<div style="font-size:11px;color:#B0B3B8;margin-top:2px;">📍 {ubic}</div>'
+
+    # Descripción breve
+    desc_block = ""
     if desc_raw:
-        desc_limpia = desc_raw if len(desc_raw) <= 250 else desc_raw[:247] + "..."
-        body_lines.append(html.escape(desc_limpia))
-
-    # Notas (info de boletería, precios) — gris
-    if notas_raw:
-        body_lines.append(
-            f'<span style="color:#B0B3B8;font-size:12.5px;">💡 {html.escape(notas_raw)}</span>'
+        desc_short = desc_raw if len(desc_raw) <= 110 else desc_raw[:107] + "..."
+        desc_block = (
+            f'<div style="font-size:11px;color:#9A9A9A;margin-top:6px;line-height:1.35;'
+            f'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;'
+            f'overflow:hidden;">{html.escape(desc_short)}</div>'
+        )
+    elif notas_raw:
+        notas_short = notas_raw if len(notas_raw) <= 90 else notas_raw[:87] + "..."
+        desc_block = (
+            f'<div style="font-size:11px;color:#9A9A9A;margin-top:6px;">💡 {html.escape(notas_short)}</div>'
         )
 
-    body_html = '<br><br>'.join(body_lines)
-
-    # URL clickeable verde
+    # URL
     url_block = ""
     if url:
-        url_corto = url if len(url) <= 55 else url[:52] + "..."
+        try:
+            dominio = urlparse(url).netloc.replace("www.", "") or url[:30]
+        except Exception:
+            dominio = url[:30]
         url_block = (
-            f'<div style="margin-top:10px;">'
             f'<a href="{html.escape(url, quote=True)}" target="_blank" '
-            f'style="color:#4FC76A;font-size:12.5px;text-decoration:underline;'
-            f'word-break:break-all;">{html.escape(url_corto)}</a></div>'
+            f'style="font-size:10.5px;color:#4FC76A;text-decoration:none;'
+            f'display:block;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+            f'🔗 {html.escape(dominio)}</a>'
         )
 
-    hora_msg = datetime.now().strftime("%I:%M %p").lstrip("0").lower()
-
     html_str = f"""
-    <div style="background:#0F0F0F;border-radius:14px;padding:10px 10px 8px;margin-bottom:10px;
-                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#E4E6EB;
-                box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-      <div style="background:#1A1A1A;border-radius:10px;overflow:hidden;margin-bottom:9px;
-                  border-left:3px solid #4FC76A;">
+    <div style="background:#0F0F0F;border-radius:10px;padding:9px 10px 8px;margin-bottom:8px;
+                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                box-shadow:0 1px 5px rgba(0,0,0,0.3);">
+      <div style="display:flex;gap:9px;align-items:flex-start;">
         {img_block}
-        <div style="padding:9px 11px;">
+        <div style="flex:1;min-width:0;">
+          {cat_line}
           <div style="font-weight:700;font-size:13px;line-height:1.3;color:#FFF;
                       display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-                      overflow:hidden;margin-bottom:4px;">{html.escape(titulo_card)}</div>
-          <div style="color:#B0B3B8;font-size:11.5px;line-height:1.35;
-                      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-                      overflow:hidden;margin-bottom:5px;">{html.escape(bajada_card)}</div>
-          <div style="color:#90A0AB;font-size:10.5px;text-transform:lowercase;">{html.escape(dominio)}</div>
+                      overflow:hidden;">{titulo}</div>
+          {meta_lines}
         </div>
       </div>
-      <div style="font-size:13px;line-height:1.5;color:#E4E6EB;padding:0 4px;">{body_html}</div>
+      {desc_block}
       {url_block}
-      <div style="display:flex;justify-content:flex-end;align-items:center;
-                  margin-top:8px;padding:0 4px;">
-        <span style="color:#90A0AB;font-size:10px;">{html.escape(hora_msg)}</span>
-      </div>
     </div>
     """
     st.markdown(html_str, unsafe_allow_html=True)
@@ -457,7 +446,6 @@ def _editar(spreadsheet, evento, eid, nombre, cat, notas):
 
 
 def _botones_acciones(spreadsheet, eid, estado, ancho=2):
-    """ancho=2 para grid (solo Aprobar/Rechazar), ancho=3 para curaduría (incluye Volver)."""
     if ancho == 3:
         c1, c2, c3 = st.columns(3)
         if estado != "aprobado" and c1.button("✅ Aprobar", key=f"ok_{eid}", width="stretch"):
@@ -468,7 +456,7 @@ def _botones_acciones(spreadsheet, eid, estado, ancho=2):
             actualizar_evento(spreadsheet, eid, {"estado": "rechazado"})
             _cargar_todos.clear()
             st.rerun()
-        if estado != "pendiente" and c3.button("↩️ Pendiente", key=f"pe_{eid}", width="stretch"):
+        if estado not in ("pendiente", "activo", "confirmado") and c3.button("↩️ Pendiente", key=f"pe_{eid}", width="stretch"):
             actualizar_evento(spreadsheet, eid, {"estado": "pendiente"})
             _cargar_todos.clear()
             st.rerun()
