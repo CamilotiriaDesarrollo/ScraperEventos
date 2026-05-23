@@ -56,7 +56,7 @@ def _abrir_contexto(playwright, headless):
     return context, page
 
 
-def _esperar_app_cargada(page, timeout_ms=90000):
+def _esperar_app_cargada(page, timeout_ms=150000):
     """Espera a que WhatsApp Web salga de la pantalla de carga inicial."""
     selectores_app = [
         "#pane-side",

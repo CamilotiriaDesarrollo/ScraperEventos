@@ -15,6 +15,7 @@ Modos de uso:
     python bot_publicador.py --canal TEST --ciudad Bogotá --una-sola --dry-run --ignorar-ventana
 """
 import argparse
+import ctypes
 import logging
 import random
 import sys
@@ -46,6 +47,32 @@ logger = logging.getLogger(__name__)
 # Mínimo absoluto entre publicaciones. Por debajo de este umbral WhatsApp
 # detecta spam y puede cerrar el canal. Aplica incluso al canal TEST.
 INTERVALO_MINIMO_SPAM_SEG = 600  # 10 minutos
+
+# Previene que Windows suspenda el PC mientras el bot está corriendo.
+# Sin esto, el PC se duerme durante el time.sleep() entre publicaciones
+# y WhatsApp Web falla al reconectar ("Conectando a WhatsApp...").
+_ES_CONTINUOUS        = 0x80000000
+_ES_SYSTEM_REQUIRED   = 0x00000001
+_ES_AWAYMODE_REQUIRED = 0x00000040
+
+
+def _prevent_sleep():
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                _ES_CONTINUOUS | _ES_SYSTEM_REQUIRED | _ES_AWAYMODE_REQUIRED
+            )
+            logger.info("Sleep prevention activo (PC no se suspenderá mientras el bot corre).")
+        except Exception:
+            pass
+
+
+def _restore_sleep():
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.kernel32.SetThreadExecutionState(_ES_CONTINUOUS)
+        except Exception:
+            pass
 
 _INTERVALOS = {
     "bogota": (WA_INTERVALO_MIN_SEC_BOGOTA, WA_INTERVALO_MAX_SEC_BOGOTA),
@@ -128,6 +155,8 @@ def main():
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+    _prevent_sleep()
+
     canal_url = WA_CANALES.get(args.canal, "")
     if not canal_url:
         for k, v in WA_CANALES.items():
@@ -183,4 +212,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    finally:
+        _restore_sleep()
