@@ -175,6 +175,23 @@ def _esperar_preview_link(page, max_seg=15):
     return False
 
 
+def _esperar_red(max_seg=120):
+    """Espera a que web.whatsapp.com sea alcanzable tras un wake-up del PC."""
+    import urllib.request
+    for i in range(max_seg // 5):
+        try:
+            urllib.request.urlopen("https://web.whatsapp.com/", timeout=4)
+            if i > 0:
+                logger.info("Red disponible.")
+            return True
+        except Exception:
+            if i == 0:
+                logger.info("Red aún no disponible, esperando reconexión tras wake-up...")
+            time.sleep(5)
+    logger.warning(f"Red no alcanzable tras {max_seg}s.")
+    return False
+
+
 def publicar(canal_nombre, texto, headless=True, esperar_preview_seg=15):
     """Envía `texto` al canal con `canal_nombre` (nombre exacto como aparece en WhatsApp Web).
     Retorna True si éxito."""
@@ -183,6 +200,9 @@ def publicar(canal_nombre, texto, headless=True, esperar_preview_seg=15):
         return False
     if not USER_DATA_DIR.exists() or not any(USER_DATA_DIR.iterdir()):
         logger.error(f"No existe perfil persistente en {USER_DATA_DIR}. Corre 'python whatsapp_publisher.py --setup'")
+        return False
+
+    if not _esperar_red():
         return False
 
     from playwright.sync_api import sync_playwright

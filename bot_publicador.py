@@ -48,6 +48,10 @@ logger = logging.getLogger(__name__)
 # detecta spam y puede cerrar el canal. Aplica incluso al canal TEST.
 INTERVALO_MINIMO_SPAM_SEG = 600  # 10 minutos
 
+# Reintentos cuando WhatsApp Web no carga (ej: red aún reconectando tras wake-up)
+REINTENTOS_MAX = 3
+REINTENTO_DELAY_SEG = 90  # 90s entre intentos — suficiente para que la red reconecte
+
 # Previene que Windows suspenda el PC mientras el bot está corriendo.
 # Sin esto, el PC se duerme durante el time.sleep() entre publicaciones
 # y WhatsApp Web falla al reconectar ("Conectando a WhatsApp...").
@@ -186,10 +190,20 @@ def main():
             return 0
 
         evento = cola[0]
-        ok = _publicar_uno(spreadsheet, evento, canal_url, args.dry_run,
-                           headless=not args.no_headless)
+        ok = False
+        for intento in range(1, REINTENTOS_MAX + 1):
+            ok = _publicar_uno(spreadsheet, evento, canal_url, args.dry_run,
+                               headless=not args.no_headless)
+            if ok:
+                break
+            if intento < REINTENTOS_MAX:
+                logger.warning(
+                    f"Intento {intento}/{REINTENTOS_MAX} fallido. "
+                    f"Reintentando en {REINTENTO_DELAY_SEG}s (red reconectando tras wake-up?)..."
+                )
+                time.sleep(REINTENTO_DELAY_SEG)
         if not ok:
-            logger.error("Abortando por fallo de publicación.")
+            logger.error(f"Abortando tras {REINTENTOS_MAX} intentos fallidos.")
             return 1
 
         publicados += 1
