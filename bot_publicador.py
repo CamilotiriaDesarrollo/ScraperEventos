@@ -133,7 +133,10 @@ def _publicar_uno(spreadsheet, evento, canal_url, dry_run, sesion=None, headless
 
     ok = sesion.publicar(canal_url, texto) if sesion else publicar(canal_url, texto, headless=headless)
     if ok:
-        actualizar_evento(spreadsheet, eid, {"estado": "publicado"})
+        actualizar_evento(spreadsheet, eid, {
+            "estado": "publicado",
+            "fecha_publicacion": datetime.now().strftime("%Y-%m-%d"),
+        })
         logger.info(f"✅ {eid} publicado.")
     else:
         logger.error(f"❌ Falló la publicación de {eid}.")
@@ -159,7 +162,19 @@ def main():
                         help="Mostrar el navegador (debug)")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    import os
+    log_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f"bot_{args.ciudad.lower()}_{datetime.now().strftime('%Y%m%d')}.log")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(log_file, encoding="utf-8"),
+        ],
+    )
+    logger.info(f"Log: {log_file}")
 
     _prevent_sleep()
 
@@ -190,9 +205,10 @@ def main():
         while True:
             h_fin_override = args.hora_fin or None
             if not args.ignorar_ventana and not en_ventana_horaria(h_fin=h_fin_override):
-                h_ini, h_fin_cfg = WA_VENTANA_HORARIA
-                fin = h_fin_override or h_fin_cfg
-                logger.info(f"Fuera de la ventana horaria {h_ini:02d}:00-{fin:02d}:00. Saliendo.")
+                h_ini, m_ini, h_fin_cfg, m_fin_cfg = WA_VENTANA_HORARIA
+                fin_h = h_fin_override or h_fin_cfg
+                fin_m = 0 if h_fin_override else m_fin_cfg
+                logger.info(f"Fuera de la ventana horaria {h_ini:02d}:{m_ini:02d}-{fin_h:02d}:{fin_m:02d}. Saliendo.")
                 return 0
 
             cola = cola_a_publicar(spreadsheet, args.ciudad)
