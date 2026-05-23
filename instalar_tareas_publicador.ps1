@@ -1,11 +1,11 @@
 # Registra las 2 tareas del bot publicador en el Task Scheduler de Windows.
 #
 # Tareas que instala (diarias, lun-dom):
-#   08:00 - Cola Bogota   (publica hoy primero, luego mañana, etc. hasta las 10 PM)
-#   08:00 - Cola Pereira  (mismo orden cronológico, intervalo ~60 min)
+#   08:30 - Cola Bogota   (publica hoy primero, luego mañana, etc. hasta las 8:30 PM)
+#   08:30 - Cola Pereira  (mismo orden cronológico, intervalo ~60 min)
 #
 # Intervalos anti-spam (definidos en config.py, NO se sobreescriben aquí):
-#   Bogotá:  19-22 min entre publicaciones
+#   Bogotá:  14-16 min entre publicaciones
 #   Pereira: 55-70 min entre publicaciones
 #
 # Wake Timer: el PC se despierta desde Sleep automáticamente a las 8 AM.
@@ -33,22 +33,22 @@ $Settings = New-ScheduledTaskSettingsSet `
     -RunOnlyIfNetworkAvailable `
     -WakeToRun `
     -MultipleInstances IgnoreNew `
-    -ExecutionTimeLimit (New-TimeSpan -Hours 15)
+    -ExecutionTimeLimit (New-TimeSpan -Hours 13)
 
 $Principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
 
 $Tareas = @(
     @{
         Nombre      = "PlanD_Cola_Bogota"
-        Hora        = "08:00"
+        Hora        = "08:30"
         Argumentos  = "`"$Script`" --canal TEST --ciudad Bogota"
-        Descripcion = "Bot publicador - Cola Bogota diaria (8 AM a 10 PM, ~20 min/post)"
+        Descripcion = "Bot publicador - Cola Bogota diaria (8:30 AM a 8:30 PM, ~15 min/post)"
     },
     @{
         Nombre      = "PlanD_Cola_Pereira"
-        Hora        = "08:00"
+        Hora        = "08:30"
         Argumentos  = "`"$Script`" --canal TEST --ciudad Pereira"
-        Descripcion = "Bot publicador - Cola Pereira diaria (8 AM a 10 PM, ~60 min/post)"
+        Descripcion = "Bot publicador - Cola Pereira diaria (8:30 AM a 8:30 PM, ~60 min/post)"
     }
 )
 
@@ -88,9 +88,11 @@ foreach ($vieja in @("PlanD_Alertas_Bogota", "PlanD_Alertas_Pereira")) {
 Write-Host ""
 Write-Host "2 tareas registradas. Verificar con:" -ForegroundColor Cyan
 Write-Host "  Get-ScheduledTask | Where-Object TaskName -like 'PlanD_*'" -ForegroundColor Cyan
+
+# Desactivar sleep e hibernacion automatica en AC para que el bot no se interrumpa
 Write-Host ""
-Write-Host "WAKE TIMER - para encendido automatico desde Sleep:" -ForegroundColor Yellow
-Write-Host "  1. Una sola vez: Configuracion > Sistema > Energia >" -ForegroundColor Yellow
-Write-Host "     'Permitir temporizadores de reactivacion' = Habilitado" -ForegroundColor Yellow
-Write-Host "  2. Al terminar de trabajar: Inicio > Encender > Suspender" -ForegroundColor Yellow
-Write-Host "     (NO Apagar - el Wake Timer no funciona con Apagar)" -ForegroundColor Yellow
+Write-Host "Configurando energia: desactivando sleep/hibernate automatico en AC..." -ForegroundColor Yellow
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+powercfg /hibernate off
+Write-Host "Energia configurada: sleep/hibernate desactivados en AC." -ForegroundColor Cyan

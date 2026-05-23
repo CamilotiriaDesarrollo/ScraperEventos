@@ -42,13 +42,14 @@ WA_CANALES = {
     "Pereira": os.getenv("WA_CANAL_PEREIRA", ""),
 }
 
-# Ventana horaria local en la que el bot puede publicar (hora 24h)
-WA_VENTANA_HORARIA = (8, 22)  # 8 AM – 10 PM
+# Ventana horaria local en la que el bot puede publicar
+# Formato: (hora_inicio, min_inicio, hora_fin, min_fin)
+WA_VENTANA_HORARIA = (8, 30, 20, 30)  # 8:30 AM – 8:30 PM
 
 # Intervalos por ciudad (segundos entre publicaciones consecutivas)
 # Bogotá: ~200-250 eventos/semana → intervalo corto para cubrir todo
-WA_INTERVALO_MIN_SEC_BOGOTA = 19 * 60   # 19 min
-WA_INTERVALO_MAX_SEC_BOGOTA = 22 * 60   # 22 min
+WA_INTERVALO_MIN_SEC_BOGOTA = 14 * 60   # 14 min
+WA_INTERVALO_MAX_SEC_BOGOTA = 16 * 60   # 16 min
 
 # Pereira: ~50-100 eventos/semana → intervalo más largo
 WA_INTERVALO_MIN_SEC_PEREIRA = 55 * 60  # 55 min

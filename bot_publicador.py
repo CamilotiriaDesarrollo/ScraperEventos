@@ -40,13 +40,13 @@ from config import (
     WA_VENTANA_HORARIA,
 )
 from sheets_client import actualizar_evento, get_client
-from whatsapp_publisher import publicar
+from whatsapp_publisher import SesionWhatsApp, publicar
 
 logger = logging.getLogger(__name__)
 
 # Mínimo absoluto entre publicaciones. Por debajo de este umbral WhatsApp
 # detecta spam y puede cerrar el canal. Aplica incluso al canal TEST.
-INTERVALO_MINIMO_SPAM_SEG = 600  # 10 minutos
+INTERVALO_MINIMO_SPAM_SEG = 840  # 14 minutos
 
 # Reintentos cuando WhatsApp Web no carga (ej: red aún reconectando tras wake-up)
 REINTENTOS_MAX = 3
@@ -89,10 +89,12 @@ def _intervalo_ciudad(ciudad):
 
 
 def en_ventana_horaria(ahora=None, h_fin=None):
-    h_inicio, h_fin_cfg = WA_VENTANA_HORARIA
-    h = (ahora or datetime.now()).hour
-    fin = h_fin if h_fin else h_fin_cfg
-    return h_inicio <= h < fin
+    h_inicio, m_inicio, h_fin_cfg, m_fin_cfg = WA_VENTANA_HORARIA
+    ahora = ahora or datetime.now()
+    ahora_min  = ahora.hour * 60 + ahora.minute
+    inicio_min = h_inicio * 60 + m_inicio
+    fin_min    = h_fin * 60 if h_fin else h_fin_cfg * 60 + m_fin_cfg
+    return inicio_min <= ahora_min < fin_min
 
 
 def _norm(s):
@@ -117,7 +119,7 @@ def cola_a_publicar(spreadsheet, ciudad):
 
 
 
-def _publicar_uno(spreadsheet, evento, canal_url, dry_run, headless=True):
+def _publicar_uno(spreadsheet, evento, canal_url, dry_run, sesion=None, headless=True):
     eid = str(evento.get("byil", evento.get("id", "")))
     nombre = (evento.get("nombre_evento") or "")[:60]
     texto = generar_caption(evento)
@@ -129,7 +131,7 @@ def _publicar_uno(spreadsheet, evento, canal_url, dry_run, headless=True):
         logger.info("DRY-RUN: no se publica.")
         return True
 
-    ok = publicar(canal_url, texto, headless=headless)
+    ok = sesion.publicar(canal_url, texto) if sesion else publicar(canal_url, texto, headless=headless)
     if ok:
         actualizar_evento(spreadsheet, eid, {"estado": "publicado"})
         logger.info(f"✅ {eid} publicado.")
@@ -174,55 +176,67 @@ def main():
     spreadsheet = get_client()
     intervalo_min, intervalo_max = _intervalo_ciudad(args.ciudad)
 
-    # ── Cola de publicación ────────────────────────────────────────────────
-    publicados = 0
-    while True:
-        h_fin_override = args.hora_fin or None
-        if not args.ignorar_ventana and not en_ventana_horaria(h_fin=h_fin_override):
-            h_ini, h_fin_cfg = WA_VENTANA_HORARIA
-            fin = h_fin_override or h_fin_cfg
-            logger.info(f"Fuera de la ventana horaria {h_ini:02d}:00-{fin:02d}:00. Saliendo.")
-            return 0
+    # ── Sesión WhatsApp persistente ────────────────────────────────────────
+    # Chromium se abre UNA vez y se reutiliza para todas las publicaciones.
+    # Esto evita la desconexión WebSocket que ocurre al abrir/cerrar por evento.
+    sesion_ctx = SesionWhatsApp(headless=not args.no_headless) if not args.dry_run else None
 
-        cola = cola_a_publicar(spreadsheet, args.ciudad)
-        if not cola:
-            logger.info(f"Cola vacía para {args.ciudad}. Nada que publicar.")
-            return 0
+    try:
+        if sesion_ctx:
+            sesion_ctx.__enter__()
 
-        evento = cola[0]
-        ok = False
-        for intento in range(1, REINTENTOS_MAX + 1):
-            ok = _publicar_uno(spreadsheet, evento, canal_url, args.dry_run,
-                               headless=not args.no_headless)
-            if ok:
-                break
-            if intento < REINTENTOS_MAX:
+        # ── Cola de publicación ────────────────────────────────────────────
+        publicados = 0
+        while True:
+            h_fin_override = args.hora_fin or None
+            if not args.ignorar_ventana and not en_ventana_horaria(h_fin=h_fin_override):
+                h_ini, h_fin_cfg = WA_VENTANA_HORARIA
+                fin = h_fin_override or h_fin_cfg
+                logger.info(f"Fuera de la ventana horaria {h_ini:02d}:00-{fin:02d}:00. Saliendo.")
+                return 0
+
+            cola = cola_a_publicar(spreadsheet, args.ciudad)
+            if not cola:
+                logger.info(f"Cola vacía para {args.ciudad}. Nada que publicar.")
+                return 0
+
+            evento = cola[0]
+            ok = False
+            for intento in range(1, REINTENTOS_MAX + 1):
+                ok = _publicar_uno(spreadsheet, evento, canal_url, args.dry_run,
+                                   sesion=sesion_ctx)
+                if ok:
+                    break
+                if intento < REINTENTOS_MAX:
+                    logger.warning(
+                        f"Intento {intento}/{REINTENTOS_MAX} fallido. "
+                        f"Reintentando en {REINTENTO_DELAY_SEG}s..."
+                    )
+                    time.sleep(REINTENTO_DELAY_SEG)
+            if not ok:
+                logger.error(f"Abortando tras {REINTENTOS_MAX} intentos fallidos.")
+                return 1
+
+            publicados += 1
+            if args.una_sola:
+                return 0
+            if args.n and publicados >= args.n:
+                logger.info(f"Alcancé el límite de {args.n} publicaciones.")
+                return 0
+
+            delay = args.intervalo if args.intervalo else random.uniform(intervalo_min, intervalo_max)
+            if delay < INTERVALO_MINIMO_SPAM_SEG:
                 logger.warning(
-                    f"Intento {intento}/{REINTENTOS_MAX} fallido. "
-                    f"Reintentando en {REINTENTO_DELAY_SEG}s (red reconectando tras wake-up?)..."
+                    f"Intervalo {delay:.0f}s está por debajo del mínimo anti-spam "
+                    f"({INTERVALO_MINIMO_SPAM_SEG}s / {INTERVALO_MINIMO_SPAM_SEG//60} min). "
+                    f"Usando mínimo para proteger el canal."
                 )
-                time.sleep(REINTENTO_DELAY_SEG)
-        if not ok:
-            logger.error(f"Abortando tras {REINTENTOS_MAX} intentos fallidos.")
-            return 1
-
-        publicados += 1
-        if args.una_sola:
-            return 0
-        if args.n and publicados >= args.n:
-            logger.info(f"Alcancé el límite de {args.n} publicaciones.")
-            return 0
-
-        delay = args.intervalo if args.intervalo else random.uniform(intervalo_min, intervalo_max)
-        if delay < INTERVALO_MINIMO_SPAM_SEG:
-            logger.warning(
-                f"Intervalo {delay:.0f}s está por debajo del mínimo anti-spam "
-                f"({INTERVALO_MINIMO_SPAM_SEG}s / {INTERVALO_MINIMO_SPAM_SEG//60} min). "
-                f"Usando mínimo para proteger el canal."
-            )
-            delay = INTERVALO_MINIMO_SPAM_SEG
-        logger.info(f"Esperando {delay:.0f}s ({delay/60:.1f} min) antes del siguiente...")
-        time.sleep(delay)
+                delay = INTERVALO_MINIMO_SPAM_SEG
+            logger.info(f"Esperando {delay:.0f}s ({delay/60:.1f} min) antes del siguiente...")
+            time.sleep(delay)
+    finally:
+        if sesion_ctx:
+            sesion_ctx.__exit__(None, None, None)
 
 
 if __name__ == "__main__":
