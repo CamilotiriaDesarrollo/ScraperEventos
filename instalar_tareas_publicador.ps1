@@ -41,13 +41,13 @@ $Tareas = @(
     @{
         Nombre      = "PlanD_Cola_Bogota"
         Hora        = "08:00"
-        Argumentos  = "$Script --canal TEST --ciudad Bogota"
+        Argumentos  = "`"$Script`" --canal TEST --ciudad Bogota"
         Descripcion = "Bot publicador - Cola Bogota diaria (8 AM a 10 PM, ~20 min/post)"
     },
     @{
         Nombre      = "PlanD_Cola_Pereira"
         Hora        = "08:00"
-        Argumentos  = "$Script --canal TEST --ciudad Pereira"
+        Argumentos  = "`"$Script`" --canal TEST --ciudad Pereira"
         Descripcion = "Bot publicador - Cola Pereira diaria (8 AM a 10 PM, ~60 min/post)"
     }
 )
