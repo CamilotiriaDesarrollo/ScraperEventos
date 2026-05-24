@@ -32,9 +32,23 @@ logger = logging.getLogger(__name__)
 USER_DATA_DIR = WA_SESSION_DIR / "user-data"
 
 
+def _limpiar_locks():
+    """Elimina archivos de bloqueo que Chromium deja cuando es terminado abruptamente.
+    Sin esto, el siguiente launch_persistent_context no puede abrir el perfil."""
+    for nombre in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        lock = USER_DATA_DIR / nombre
+        try:
+            if lock.exists():
+                lock.unlink()
+                logger.info(f"Lock eliminado: {nombre}")
+        except Exception:
+            pass
+
+
 def _abrir_contexto(playwright, headless):
     """Lanza Chromium con user_data_dir persistente. Preserva IndexedDB de WA Web."""
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _limpiar_locks()
     logger.info(f"Perfil Chromium: {USER_DATA_DIR}")
     context = playwright.chromium.launch_persistent_context(
         user_data_dir=str(USER_DATA_DIR),
@@ -56,8 +70,10 @@ def _abrir_contexto(playwright, headless):
     return context, page
 
 
-def _esperar_app_cargada(page, timeout_ms=150000):
-    """Espera a que WhatsApp Web salga de la pantalla de carga inicial."""
+def _esperar_app_cargada(page, timeout_ms=240000):
+    """Espera a que WhatsApp Web salga de la pantalla de carga inicial.
+    Recarga la página a los 60s si no cargó — resuelve 'Conectando a WhatsApp...'
+    causado por desconexión WebSocket o teléfono lento al conectar."""
     selectores_app = [
         "#pane-side",
         "[aria-label='Lista de chats']",
@@ -67,6 +83,8 @@ def _esperar_app_cargada(page, timeout_ms=150000):
     ]
     elapsed = 0
     step = 1500
+    recargado = False
+
     while elapsed < timeout_ms:
         for sel in selectores_app:
             try:
@@ -74,6 +92,16 @@ def _esperar_app_cargada(page, timeout_ms=150000):
                     return True
             except Exception:
                 continue
+
+        # A los 60s recargar — da margen para que el teléfono conecte
+        if not recargado and elapsed >= 60000:
+            logger.info("App no cargó tras 60s, recargando página para reconectar WebSocket...")
+            try:
+                page.reload(wait_until="domcontentloaded")
+            except Exception:
+                pass
+            recargado = True
+
         page.wait_for_timeout(step)
         elapsed += step
     return False
@@ -190,6 +218,171 @@ def _esperar_red(max_seg=120):
             time.sleep(5)
     logger.warning(f"Red no alcanzable tras {max_seg}s.")
     return False
+
+
+def _enviar_texto(page, texto, esperar_preview_seg=15):
+    """Escribe y envía el texto en el cuadro activo de WhatsApp Web."""
+    input_selectors = [
+        'footer div[contenteditable="true"][role="textbox"]',
+        'div[contenteditable="true"][data-tab="10"]',
+        'div[contenteditable="true"][data-tab="6"]',
+        'div[contenteditable="true"][role="textbox"]',
+        'div[role="textbox"][contenteditable="true"]',
+    ]
+    input_box = None
+    for _ in range(15):
+        for sel in input_selectors:
+            try:
+                loc = page.locator(sel).last
+                if loc.count() > 0:
+                    input_box = loc
+                    break
+            except Exception:
+                continue
+        if input_box is not None:
+            break
+        page.wait_for_timeout(1000)
+
+    if input_box is None:
+        logger.error("No se encontró el cuadro de texto. ¿Eres admin del canal?")
+        page.screenshot(path=str(WA_SESSION_DIR / "error_no_input.png"))
+        return False
+
+    input_box.click()
+    page.wait_for_timeout(700)
+
+    for i, linea in enumerate(texto.split("\n")):
+        if i > 0:
+            page.keyboard.press("Shift+Enter")
+        page.keyboard.type(linea, delay=15)
+
+    if "http" in texto:
+        if not _esperar_preview_link(page, max_seg=esperar_preview_seg):
+            logger.warning("No se detectó preview del link; envío igual.")
+    else:
+        page.wait_for_timeout(2000)
+
+    send_selectors = [
+        'button[aria-label="Enviar"]',
+        'button[aria-label="Send"]',
+        'span[data-icon="send"]',
+        'button[data-tab="11"]',
+    ]
+    for sel in send_selectors:
+        try:
+            btn = page.locator(sel).last
+            if btn.count() > 0:
+                btn.click()
+                page.wait_for_timeout(3500)
+                logger.info("Publicación enviada.")
+                return True
+        except Exception:
+            continue
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(3500)
+    logger.info("Publicación enviada.")
+    return True
+
+
+class SesionWhatsApp:
+    """Chromium persistente para toda la jornada del bot (8 AM – 10 PM).
+
+    Abre el navegador UNA sola vez y reutiliza la misma página para cada
+    publicación. Evita la desconexión WebSocket que ocurre al abrir/cerrar
+    Chromium entre mensajes.
+
+    Si el PC se suspende y reanuda, WhatsApp Web reconecta solo — el método
+    publicar() espera a que la app vuelva a estar disponible antes de enviar.
+
+    Uso:
+        with SesionWhatsApp(headless=True) as sesion:
+            sesion.publicar("Mi Canal", "hola")
+            time.sleep(1200)
+            sesion.publicar("Mi Canal", "segundo mensaje")
+    """
+
+    def __init__(self, headless=True):
+        self.headless = headless
+        self._pw = None
+        self._context = None
+        self._page = None
+
+    def __enter__(self):
+        from playwright.sync_api import sync_playwright
+        if not _esperar_red():
+            raise RuntimeError("Sin red al iniciar sesión WhatsApp")
+        self._pw = sync_playwright().start()
+        self._context, self._page = _abrir_contexto(self._pw, self.headless)
+        logger.info("Cargando WhatsApp Web (sesión persistente)…")
+        self._page.goto("https://web.whatsapp.com/", wait_until="domcontentloaded")
+        if not _esperar_app_cargada(self._page):
+            raise RuntimeError("WhatsApp Web no cargó en el inicio de sesión")
+        self._page.wait_for_timeout(2000)
+        logger.info("Sesión WhatsApp Web lista.")
+        return self
+
+    def __exit__(self, *args):
+        for obj in (self._context, self._pw):
+            try:
+                if obj:
+                    obj.close() if hasattr(obj, "close") else obj.stop()
+            except Exception:
+                pass
+
+    def _esperar_conectado(self, max_seg=180):
+        """Espera a que WhatsApp reconecte tras suspend/resume del PC."""
+        selectores_ok = [
+            "#pane-side",
+            "[aria-label='Lista de chats']",
+            "[aria-label='Chat list']",
+            "div[role='grid']",
+        ]
+        elapsed = 0
+        step = 2000
+        logged = False
+        while elapsed < max_seg * 1000:
+            for sel in selectores_ok:
+                try:
+                    if self._page.locator(sel).count() > 0:
+                        if logged:
+                            logger.info("WhatsApp reconectado.")
+                        return True
+                except Exception:
+                    pass
+            if not logged:
+                logger.info("WhatsApp reconectando tras wake-up, esperando…")
+                logged = True
+            self._page.wait_for_timeout(step)
+            elapsed += step
+        return False
+
+    def publicar(self, canal_nombre, texto, esperar_preview_seg=15):
+        """Publica un mensaje reutilizando el Chromium ya abierto."""
+        if not self._esperar_conectado():
+            logger.error("WhatsApp no reconectó. ¿El teléfono tiene internet?")
+            try:
+                self._page.screenshot(path=str(WA_SESSION_DIR / "error_no_carga.png"))
+            except Exception:
+                pass
+            return False
+
+        if not _abrir_canal(self._page, canal_nombre):
+            logger.error(f"No encontré el canal '{canal_nombre}'.")
+            try:
+                self._page.screenshot(path=str(WA_SESSION_DIR / "error_canal_no_encontrado.png"))
+            except Exception:
+                pass
+            return False
+
+        try:
+            return _enviar_texto(self._page, texto, esperar_preview_seg)
+        except Exception as exc:
+            logger.error(f"Error al enviar: {exc}")
+            try:
+                self._page.screenshot(path=str(WA_SESSION_DIR / "error_publicar.png"))
+            except Exception:
+                pass
+            return False
 
 
 def publicar(canal_nombre, texto, headless=True, esperar_preview_seg=15):
