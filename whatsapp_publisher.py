@@ -32,11 +32,11 @@ logger = logging.getLogger(__name__)
 USER_DATA_DIR = WA_SESSION_DIR / "user-data"
 
 
-def _limpiar_locks():
+def _limpiar_locks(user_data_dir):
     """Elimina archivos de bloqueo que Chromium deja cuando es terminado abruptamente.
     Sin esto, el siguiente launch_persistent_context no puede abrir el perfil."""
     for nombre in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
-        lock = USER_DATA_DIR / nombre
+        lock = user_data_dir / nombre
         try:
             if lock.exists():
                 lock.unlink()
@@ -45,13 +45,14 @@ def _limpiar_locks():
             pass
 
 
-def _abrir_contexto(playwright, headless):
+def _abrir_contexto(playwright, headless, user_data_dir=None):
     """Lanza Chromium con user_data_dir persistente. Preserva IndexedDB de WA Web."""
-    USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _limpiar_locks()
-    logger.info(f"Perfil Chromium: {USER_DATA_DIR}")
+    udd = user_data_dir or USER_DATA_DIR
+    udd.mkdir(parents=True, exist_ok=True)
+    _limpiar_locks(udd)
+    logger.info(f"Perfil Chromium: {udd}")
     context = playwright.chromium.launch_persistent_context(
-        user_data_dir=str(USER_DATA_DIR),
+        user_data_dir=str(udd),
         headless=headless,
         user_agent=USER_AGENT,
         locale="es-CO",
@@ -107,11 +108,13 @@ def _esperar_app_cargada(page, timeout_ms=240000):
     return False
 
 
-def setup_session(timeout_seg=180):
+def setup_session(timeout_seg=180, user_data_dir=None):
     """Abre WhatsApp Web no-headless para escanear el QR. Detecta automáticamente
     cuando la sesión inicia (lista de chats visible) y persiste el perfil."""
+    from pathlib import Path
     from playwright.sync_api import sync_playwright
 
+    udd = Path(user_data_dir) if user_data_dir else USER_DATA_DIR
     print()
     print("=" * 60)
     print("SETUP de sesión WhatsApp Web")
@@ -119,15 +122,16 @@ def setup_session(timeout_seg=180):
     print("1. Se abrirá Chromium con WhatsApp Web.")
     print("2. Escaneá el QR con tu teléfono (WhatsApp > Dispositivos vinculados).")
     print(f"3. El script detectará el login automáticamente (timeout {timeout_seg}s).")
+    print(f"   Perfil: {udd}")
     print()
 
     with sync_playwright() as p:
-        context, page = _abrir_contexto(p, headless=False)
+        context, page = _abrir_contexto(p, headless=False, user_data_dir=udd)
         page.goto("https://web.whatsapp.com/", wait_until="domcontentloaded")
 
         if _esperar_app_cargada(page, timeout_ms=timeout_seg * 1000):
             page.wait_for_timeout(3000)
-            print(f"\nSesion logueada y guardada en {USER_DATA_DIR}")
+            print(f"\nSesion logueada y guardada en {udd}")
             context.close()
             return True
         else:
@@ -301,8 +305,9 @@ class SesionWhatsApp:
             sesion.publicar("Mi Canal", "segundo mensaje")
     """
 
-    def __init__(self, headless=True):
+    def __init__(self, headless=True, user_data_dir=None):
         self.headless = headless
+        self._user_data_dir = user_data_dir
         self._pw = None
         self._context = None
         self._page = None
@@ -312,7 +317,7 @@ class SesionWhatsApp:
         if not _esperar_red():
             raise RuntimeError("Sin red al iniciar sesión WhatsApp")
         self._pw = sync_playwright().start()
-        self._context, self._page = _abrir_contexto(self._pw, self.headless)
+        self._context, self._page = _abrir_contexto(self._pw, self.headless, self._user_data_dir)
         logger.info("Cargando WhatsApp Web (sesión persistente)…")
         self._page.goto("https://web.whatsapp.com/", wait_until="domcontentloaded")
         if not _esperar_app_cargada(self._page):
@@ -496,6 +501,7 @@ def publicar(canal_nombre, texto, headless=True, esperar_preview_seg=15):
 def _cli():
     parser = argparse.ArgumentParser()
     parser.add_argument("--setup", action="store_true", help="Escanea QR y guarda sesión")
+    parser.add_argument("--ciudad", default="", help="Ciudad para --setup (Bogota/Pereira). Vacío = perfil default")
     parser.add_argument("--canal", default="TEST", help="Nombre del canal (TEST/Bogotá/Pereira)")
     parser.add_argument("--texto", default="", help="Texto a publicar")
     parser.add_argument("--no-headless", action="store_true", help="Mostrar navegador (debug)")
@@ -504,7 +510,11 @@ def _cli():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
     if args.setup:
-        setup_session()
+        import unicodedata
+        def _norm(s):
+            return unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode().strip().lower()
+        udd = (WA_SESSION_DIR / f"user-data-{_norm(args.ciudad)}") if args.ciudad else None
+        setup_session(user_data_dir=udd)
         return 0
 
     if not args.texto:

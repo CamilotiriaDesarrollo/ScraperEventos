@@ -39,6 +39,7 @@ from config import (
     WA_INTERVALO_MIN_SEC_BOGOTA,
     WA_INTERVALO_MIN_SEC_BURST,
     WA_INTERVALO_MIN_SEC_PEREIRA,
+    WA_SESSION_DIR,
     WA_VENTANA_HORARIA,
 )
 from sheets_client import actualizar_evento, get_client
@@ -194,13 +195,14 @@ def main():
     intervalo_min, intervalo_max = _intervalo_ciudad(args.ciudad)
 
     # ── Sesión WhatsApp persistente ────────────────────────────────────────
-    # Chromium se abre UNA vez y se reutiliza para todas las publicaciones.
-    # Esto evita la desconexión WebSocket que ocurre al abrir/cerrar por evento.
+    # Cada ciudad usa su propio perfil de Chromium para evitar conflictos de
+    # SingletonLock cuando Bogotá y Pereira corren simultáneamente.
+    perfil_ciudad = WA_SESSION_DIR / f"user-data-{_norm(args.ciudad)}"
     sesion_ctx = None
     if not args.dry_run:
         for intento_sesion in range(1, REINTENTOS_MAX + 1):
             try:
-                sesion_ctx = SesionWhatsApp(headless=not args.no_headless)
+                sesion_ctx = SesionWhatsApp(headless=not args.no_headless, user_data_dir=perfil_ciudad)
                 sesion_ctx.__enter__()
                 break
             except Exception as e:
