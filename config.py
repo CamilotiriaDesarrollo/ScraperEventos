@@ -51,6 +51,10 @@ WA_VENTANA_HORARIA = (8, 30, 20, 30)  # 8:30 AM – 8:30 PM
 WA_INTERVALO_MIN_SEC_BOGOTA = 14 * 60   # 14 min
 WA_INTERVALO_MAX_SEC_BOGOTA = 16 * 60   # 16 min
 
+# Burst matutino: eventos de HOY se publican rápido para cubrir el día temprano
+WA_INTERVALO_MIN_SEC_BURST = 6 * 60     # 6 min
+WA_INTERVALO_MAX_SEC_BURST = 8 * 60     # 8 min
+
 # Pereira: ~50-100 eventos/semana → intervalo más largo
 WA_INTERVALO_MIN_SEC_PEREIRA = 55 * 60  # 55 min
 WA_INTERVALO_MAX_SEC_PEREIRA = 70 * 60  # 70 min

@@ -33,9 +33,11 @@ from config import (
     WA_CANALES,
     WA_INTERVALO_MAX_SEC,
     WA_INTERVALO_MAX_SEC_BOGOTA,
+    WA_INTERVALO_MAX_SEC_BURST,
     WA_INTERVALO_MAX_SEC_PEREIRA,
     WA_INTERVALO_MIN_SEC,
     WA_INTERVALO_MIN_SEC_BOGOTA,
+    WA_INTERVALO_MIN_SEC_BURST,
     WA_INTERVALO_MIN_SEC_PEREIRA,
     WA_VENTANA_HORARIA,
 )
@@ -46,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 # Mínimo absoluto entre publicaciones. Por debajo de este umbral WhatsApp
 # detecta spam y puede cerrar el canal. Aplica incluso al canal TEST.
-INTERVALO_MINIMO_SPAM_SEG = 840  # 14 minutos
+INTERVALO_MINIMO_SPAM_SEG = 360  # 6 minutos (burst matutino)
 
 # Reintentos cuando WhatsApp Web no carga (ej: red aún reconectando tras wake-up)
 REINTENTOS_MAX = 3
@@ -261,12 +263,24 @@ def main():
                 logger.info(f"Alcancé el límite de {args.n} publicaciones.")
                 return 0
 
-            delay = args.intervalo if args.intervalo else random.uniform(intervalo_min, intervalo_max)
+            # Burst si el próximo evento en la cola ya cargada es de hoy
+            hoy_str = datetime.now().strftime("%Y-%m-%d")
+            proximo_es_hoy = (
+                len(cola) > 1 and
+                str(cola[1].get("fecha_evento", "")).strip() == hoy_str
+            )
+            if proximo_es_hoy:
+                delay_min_uso, delay_max_uso = WA_INTERVALO_MIN_SEC_BURST, WA_INTERVALO_MAX_SEC_BURST
+                logger.info("Modo burst: próximo evento es de hoy.")
+            else:
+                delay_min_uso, delay_max_uso = intervalo_min, intervalo_max
+
+            delay = args.intervalo if args.intervalo else random.uniform(delay_min_uso, delay_max_uso)
             if delay < INTERVALO_MINIMO_SPAM_SEG:
                 logger.warning(
-                    f"Intervalo {delay:.0f}s está por debajo del mínimo anti-spam "
+                    f"Intervalo {delay:.0f}s por debajo del mínimo anti-spam "
                     f"({INTERVALO_MINIMO_SPAM_SEG}s / {INTERVALO_MINIMO_SPAM_SEG//60} min). "
-                    f"Usando mínimo para proteger el canal."
+                    f"Usando mínimo."
                 )
                 delay = INTERVALO_MINIMO_SPAM_SEG
             logger.info(f"Esperando {delay:.0f}s ({delay/60:.1f} min) antes del siguiente...")
