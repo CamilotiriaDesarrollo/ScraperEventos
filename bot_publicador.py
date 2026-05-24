@@ -194,11 +194,32 @@ def main():
     # ── Sesión WhatsApp persistente ────────────────────────────────────────
     # Chromium se abre UNA vez y se reutiliza para todas las publicaciones.
     # Esto evita la desconexión WebSocket que ocurre al abrir/cerrar por evento.
-    sesion_ctx = SesionWhatsApp(headless=not args.no_headless) if not args.dry_run else None
+    sesion_ctx = None
+    if not args.dry_run:
+        for intento_sesion in range(1, REINTENTOS_MAX + 1):
+            try:
+                sesion_ctx = SesionWhatsApp(headless=not args.no_headless)
+                sesion_ctx.__enter__()
+                break
+            except Exception as e:
+                logger.warning(f"Sesión WA falló (intento {intento_sesion}/{REINTENTOS_MAX}): {e}")
+                try:
+                    sesion_ctx.__exit__(None, None, None)
+                except Exception:
+                    pass
+                sesion_ctx = None
+                if intento_sesion < REINTENTOS_MAX:
+                    logger.info(f"Reintentando sesión en {REINTENTO_DELAY_SEG}s... (¿el teléfono está online?)")
+                    time.sleep(REINTENTO_DELAY_SEG)
+        if sesion_ctx is None:
+            logger.error(
+                f"No se pudo iniciar sesión WhatsApp tras {REINTENTOS_MAX} intentos. "
+                "Verificar: 1) teléfono encendido con internet, 2) re-escanear QR con "
+                "'python whatsapp_publisher.py --setup'."
+            )
+            return 1
 
     try:
-        if sesion_ctx:
-            sesion_ctx.__enter__()
 
         # ── Cola de publicación ────────────────────────────────────────────
         publicados = 0
