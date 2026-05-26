@@ -18,3 +18,10 @@ logs/
 # Claude Code metadata local
 .claude/
 
+# Estado en tiempo de ejecución (cambia con cada publicación)
+canal_state.json
+
+# Archivos de sesión temporales
+sesion_ig_hoy.md
+temp_*.py
+

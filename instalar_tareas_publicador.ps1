@@ -42,13 +42,13 @@ $Tareas = @(
         Nombre      = "PlanD_Cola_Bogota"
         Hora        = "08:30"
         Argumentos  = "`"$Script`" --canal Bogota --ciudad Bogota"
-        Descripcion = "Bot publicador - Cola Bogota diaria (8:30 AM a 8:30 PM, burst hoy / 14-16 min resto)"
+        Descripcion = "Bot publicador - Cola Bogota diaria (8:30 AM a 10 PM, 35-45 min entre publicaciones)"
     },
     @{
         Nombre      = "PlanD_Cola_Pereira"
         Hora        = "08:30"
         Argumentos  = "`"$Script`" --canal Pereira --ciudad Pereira"
-        Descripcion = "Bot publicador - Cola Pereira diaria (8:30 AM a 8:30 PM, burst hoy / 55-70 min resto)"
+        Descripcion = "Bot publicador - Cola Pereira diaria (8:30 AM a 10 PM, 65-80 min entre publicaciones)"
     }
 )
 
@@ -59,9 +59,10 @@ foreach ($t in $Tareas) {
         Unregister-ScheduledTask -TaskName $t.Nombre -Confirm:$false
     }
 
+    $PsArgs = "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"& '$Python' $($t.Argumentos)`""
     $Action  = New-ScheduledTaskAction `
-        -Execute $Python `
-        -Argument $t.Argumentos `
+        -Execute "powershell.exe" `
+        -Argument $PsArgs `
         -WorkingDirectory $WorkDir
 
     $Trigger = New-ScheduledTaskTrigger -Daily -At $t.Hora

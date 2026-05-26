@@ -13,6 +13,7 @@ CREDENTIALS_PATH = str(BASE_DIR / "credentials" / "service-account.json")
 TAB_EVENTOS = "EVENTOS"
 TAB_FUENTES_WEB = "FUENTES_WEB"
 TAB_LOG = "LOG"
+TAB_CONTROL = "CONTROL"
 
 REQUEST_TIMEOUT = 15
 DELAY_BETWEEN_REQUESTS = 3
@@ -42,23 +43,28 @@ WA_CANALES = {
     "Pereira": os.getenv("WA_CANAL_PEREIRA", ""),
 }
 
+# Ciudades habilitadas para publicar.
+# El estado se gestiona desde el dashboard (canal_state.json) — no editar aquí.
+import json as _json
+_CANAL_STATE_FILE = BASE_DIR / "canal_state.json"
+try:
+    with open(_CANAL_STATE_FILE, encoding="utf-8") as _f:
+        CANALES_ACTIVOS = _json.load(_f)
+except Exception:
+    CANALES_ACTIVOS = {"Bogotá": True, "Pereira": False}
+
 # Ventana horaria local en la que el bot puede publicar
 # Formato: (hora_inicio, min_inicio, hora_fin, min_fin)
-WA_VENTANA_HORARIA = (8, 30, 20, 30)  # 8:30 AM – 8:30 PM
+# Inicio en 0:00 = el bot arranca cuando el usuario lo lance; se detiene solo a las 22:00.
+WA_VENTANA_HORARIA = (0, 0, 22, 0)  # cualquier hora – 10 PM
 
-# Intervalos por ciudad (segundos entre publicaciones consecutivas)
-# Bogotá: ~200-250 eventos/semana → intervalo corto para cubrir todo
-WA_INTERVALO_MIN_SEC_BOGOTA = 14 * 60   # 14 min
-WA_INTERVALO_MAX_SEC_BOGOTA = 16 * 60   # 16 min
+# Intervalos por ciudad — calculados para agotar la semana en 6 días (11h/día)
+WA_INTERVALO_MIN_SEC_BOGOTA  = 35 * 60   # 35 min
+WA_INTERVALO_MAX_SEC_BOGOTA  = 45 * 60   # 45 min
 
-# Burst matutino: eventos de HOY se publican rápido para cubrir el día temprano
-WA_INTERVALO_MIN_SEC_BURST = 6 * 60     # 6 min
-WA_INTERVALO_MAX_SEC_BURST = 8 * 60     # 8 min
-
-# Pereira: ~50-100 eventos/semana → intervalo más largo
-WA_INTERVALO_MIN_SEC_PEREIRA = 55 * 60  # 55 min
-WA_INTERVALO_MAX_SEC_PEREIRA = 70 * 60  # 70 min
+WA_INTERVALO_MIN_SEC_PEREIRA = 65 * 60   # 65 min
+WA_INTERVALO_MAX_SEC_PEREIRA = 80 * 60   # 80 min
 
 # Fallback para ciudades no configuradas
-WA_INTERVALO_MIN_SEC = 19 * 60
-WA_INTERVALO_MAX_SEC = 22 * 60
+WA_INTERVALO_MIN_SEC = 35 * 60
+WA_INTERVALO_MAX_SEC = 45 * 60

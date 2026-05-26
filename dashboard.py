@@ -13,9 +13,11 @@ from urllib.parse import urlparse
 import streamlit as st
 
 from sheets_client import (
+    actualizar_control,
     actualizar_evento,
     actualizar_eventos_en_lote,
     get_client,
+    get_control,
 )
 from config import TAB_EVENTOS
 
@@ -230,6 +232,41 @@ def main():
     if sidebar.button("🔄 Recargar desde el Sheet"):
         _cargar_todos.clear()
         st.rerun()
+
+    sidebar.markdown("---")
+    sidebar.markdown("### 🤖 Control de Canales")
+    try:
+        _ctrl = get_control(spreadsheet)
+    except Exception:
+        _ctrl = []
+    for _r in _ctrl:
+        _ciudad    = _r.get("ciudad", "")
+        _activo    = str(_r.get("activo", "")).lower() in ("true", "1")
+        _estado    = str(_r.get("bot_estado", "detenido")).lower()
+        _corriendo = _estado == "corriendo"
+        sidebar.markdown(
+            f"**{_ciudad}** {'🟢 Activo' if _activo else '🔴 Pausado'} · "
+            f"{'▶️ Corriendo' if _corriendo else '⏹ Detenido'}"
+        )
+        _ca, _cp, _arr, _det = sidebar.columns(4)
+        if _ca.button("ON", key=f"act_{_ciudad}",
+                      disabled=_activo, use_container_width=True, help="Activar canal"):
+            actualizar_control(spreadsheet, _ciudad, {"activo": "TRUE"})
+            st.rerun()
+        if _cp.button("OFF", key=f"pau_{_ciudad}",
+                      disabled=not _activo, use_container_width=True, help="Pausar canal"):
+            actualizar_control(spreadsheet, _ciudad, {"activo": "FALSE"})
+            st.rerun()
+        if _arr.button("🚀", key=f"arr_{_ciudad}",
+                       disabled=not _activo or _corriendo,
+                       use_container_width=True, help="Arrancar bot (~1 min)"):
+            actualizar_control(spreadsheet, _ciudad, {"comando": "arrancar"})
+            st.toast(f"Comando arrancar enviado para {_ciudad} (~1 min)")
+        if _det.button("🛑", key=f"det_{_ciudad}",
+                       disabled=not _corriendo,
+                       use_container_width=True, help="Detener bot (~1 min)"):
+            actualizar_control(spreadsheet, _ciudad, {"comando": "detener"})
+            st.toast(f"Comando detener enviado para {_ciudad} (~1 min)")
 
     if not eventos:
         st.info("No hay eventos para los filtros seleccionados.")

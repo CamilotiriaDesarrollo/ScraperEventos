@@ -6,6 +6,7 @@ from google.oauth2.service_account import Credentials
 from config import (
     CREDENTIALS_PATH,
     SHEET_ID,
+    TAB_CONTROL,
     TAB_EVENTOS,
     TAB_FUENTES_WEB,
     TAB_LOG,
@@ -156,6 +157,26 @@ def actualizar_eventos_en_lote(spreadsheet, updates_por_id):
     if batch:
         ws.batch_update(batch, value_input_option="USER_ENTERED")
     return actualizados
+
+
+def get_control(spreadsheet):
+    """Devuelve los registros de la pestaña CONTROL."""
+    ws = spreadsheet.worksheet(TAB_CONTROL)
+    return ws.get_all_records()
+
+
+def actualizar_control(spreadsheet, ciudad, campos):
+    """Actualiza columnas del registro de `ciudad` en la pestaña CONTROL."""
+    ws = spreadsheet.worksheet(TAB_CONTROL)
+    encabezados = ws.row_values(1)
+    registros = ws.get_all_records()
+    for idx, row in enumerate(registros, start=2):
+        if str(row.get("ciudad", "")).strip() == ciudad:
+            for col_nombre, valor in campos.items():
+                if col_nombre in encabezados:
+                    ws.update_cell(idx, encabezados.index(col_nombre) + 1, valor)
+            return True
+    return False
 
 
 def escribir_log(spreadsheet, log_data):

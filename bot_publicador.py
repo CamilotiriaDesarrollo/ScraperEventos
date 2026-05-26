@@ -1,15 +1,14 @@
 """Orquesta la cola de publicación a WhatsApp.
 
 Estrategia:
-- Cola ordenada por fecha_evento ASC: hoy primero, mañana después, etc.
-- Bogotá:  intervalo ~20 min (8 AM – 10 PM)
-- Pereira: intervalo ~60 min (8 AM – 10 PM)
+- Cola ordenada por fecha_evento ASC: continúa desde el último evento publicado.
+- Intervalo 9-14 min aleatorio — igual para todas las ciudades.
+- Se detiene sola a las 22:00; arrancar cuando el usuario decida.
 - Cada evento se publica una sola vez; el canal es un tablero cronológico limpio.
 
 Modos de uso:
-    # Cola completa (arranca a las 8 AM, se detiene sola a las 10 PM)
-    python bot_publicador.py --canal "Plan :D - Bogotá" --ciudad Bogotá
-    python bot_publicador.py --canal "Plan :D Pereira"  --ciudad Pereira
+    python bot_publicador.py --canal Bogotá --ciudad Bogota
+    python bot_publicador.py --canal Pereira --ciudad Pereira
 
     # Test: 1 evento sin publicar realmente
     python bot_publicador.py --canal TEST --ciudad Bogotá --una-sola --dry-run --ignorar-ventana
@@ -29,15 +28,14 @@ except Exception:
 
 from caption import generar_caption
 from config import (
+    CANALES_ACTIVOS,
     TAB_EVENTOS,
     WA_CANALES,
     WA_INTERVALO_MAX_SEC,
     WA_INTERVALO_MAX_SEC_BOGOTA,
-    WA_INTERVALO_MAX_SEC_BURST,
     WA_INTERVALO_MAX_SEC_PEREIRA,
     WA_INTERVALO_MIN_SEC,
     WA_INTERVALO_MIN_SEC_BOGOTA,
-    WA_INTERVALO_MIN_SEC_BURST,
     WA_INTERVALO_MIN_SEC_PEREIRA,
     WA_SESSION_DIR,
     WA_VENTANA_HORARIA,
@@ -49,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 # Mínimo absoluto entre publicaciones. Por debajo de este umbral WhatsApp
 # detecta spam y puede cerrar el canal. Aplica incluso al canal TEST.
-INTERVALO_MINIMO_SPAM_SEG = 360  # 6 minutos (burst matutino)
+INTERVALO_MINIMO_SPAM_SEG = 540  # 9 minutos
 
 # Reintentos cuando WhatsApp Web no carga (ej: red aún reconectando tras wake-up)
 REINTENTOS_MAX = 3
@@ -81,15 +79,6 @@ def _restore_sleep():
         except Exception:
             pass
 
-_INTERVALOS = {
-    "bogota": (WA_INTERVALO_MIN_SEC_BOGOTA, WA_INTERVALO_MAX_SEC_BOGOTA),
-    "pereira": (WA_INTERVALO_MIN_SEC_PEREIRA, WA_INTERVALO_MAX_SEC_PEREIRA),
-}
-
-
-def _intervalo_ciudad(ciudad):
-    return _INTERVALOS.get(_norm(ciudad), (WA_INTERVALO_MIN_SEC, WA_INTERVALO_MAX_SEC))
-
 
 def en_ventana_horaria(ahora=None, h_fin=None):
     h_inicio, m_inicio, h_fin_cfg, m_fin_cfg = WA_VENTANA_HORARIA
@@ -106,16 +95,27 @@ def _norm(s):
     return unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode().strip().lower()
 
 
+_INTERVALOS = {
+    "bogota":  (WA_INTERVALO_MIN_SEC_BOGOTA,  WA_INTERVALO_MAX_SEC_BOGOTA),
+    "pereira": (WA_INTERVALO_MIN_SEC_PEREIRA, WA_INTERVALO_MAX_SEC_PEREIRA),
+}
+
+
+def _intervalo_ciudad(ciudad):
+    return _INTERVALOS.get(_norm(ciudad), (WA_INTERVALO_MIN_SEC, WA_INTERVALO_MAX_SEC))
+
+
 def cola_a_publicar(spreadsheet, ciudad):
-    """Eventos aprobados de esa ciudad desde hoy, ordenados por fecha asc."""
-    hoy = datetime.now().strftime("%Y-%m-%d")
+    """Eventos aprobados de esa ciudad con +3 días de anticipación, ordenados por fecha asc."""
+    from datetime import timedelta
+    desde = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
     ws = spreadsheet.worksheet(TAB_EVENTOS)
     registros = ws.get_all_records()
     cola = [
         r for r in registros
         if str(r.get("estado", "")).strip().lower() == "aprobado"
         and _norm(str(r.get("ciudad", ""))) == _norm(ciudad)
-        and str(r.get("fecha_evento", "")).strip() >= hoy
+        and str(r.get("fecha_evento", "")).strip() >= desde
     ]
     cola.sort(key=lambda e: (str(e.get("fecha_evento", "9999")), str(e.get("hora", ""))))
     return cola
@@ -180,6 +180,23 @@ def main():
     logger.info(f"Log: {log_file}")
 
     _prevent_sleep()
+
+    # Verificar que la ciudad esté activa antes de arrancar.
+    # Para cambiar: edita CANALES_ACTIVOS en config.py.
+    ciudad_activa = next(
+        (v for k, v in CANALES_ACTIVOS.items() if _norm(k) == _norm(args.ciudad)),
+        None,
+    )
+    if ciudad_activa is False:
+        logger.info(
+            f"Ciudad '{args.ciudad}' está pausada en CANALES_ACTIVOS (config.py). "
+            "Cambia a True para activarla."
+        )
+        return 0
+    if ciudad_activa is None and args.canal != "TEST":
+        logger.warning(
+            f"Ciudad '{args.ciudad}' no figura en CANALES_ACTIVOS. Continuando de todas formas."
+        )
 
     canal_url = WA_CANALES.get(args.canal, "")
     if not canal_url:
@@ -265,19 +282,7 @@ def main():
                 logger.info(f"Alcancé el límite de {args.n} publicaciones.")
                 return 0
 
-            # Burst si el próximo evento en la cola ya cargada es de hoy
-            hoy_str = datetime.now().strftime("%Y-%m-%d")
-            proximo_es_hoy = (
-                len(cola) > 1 and
-                str(cola[1].get("fecha_evento", "")).strip() == hoy_str
-            )
-            if proximo_es_hoy:
-                delay_min_uso, delay_max_uso = WA_INTERVALO_MIN_SEC_BURST, WA_INTERVALO_MAX_SEC_BURST
-                logger.info("Modo burst: próximo evento es de hoy.")
-            else:
-                delay_min_uso, delay_max_uso = intervalo_min, intervalo_max
-
-            delay = args.intervalo if args.intervalo else random.uniform(delay_min_uso, delay_max_uso)
+            delay = args.intervalo if args.intervalo else random.uniform(intervalo_min, intervalo_max)
             if delay < INTERVALO_MINIMO_SPAM_SEG:
                 logger.warning(
                     f"Intervalo {delay:.0f}s por debajo del mínimo anti-spam "
