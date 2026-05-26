@@ -40,7 +40,7 @@ from config import (
     WA_SESSION_DIR,
     WA_VENTANA_HORARIA,
 )
-from sheets_client import actualizar_evento, get_client
+from sheets_client import actualizar_control, actualizar_evento, get_client
 from whatsapp_publisher import SesionWhatsApp, publicar
 
 logger = logging.getLogger(__name__)
@@ -240,6 +240,13 @@ def main():
             )
             return 1
 
+    def _señalar_detenido():
+        if not args.dry_run:
+            try:
+                actualizar_control(spreadsheet, args.ciudad, {"bot_estado": "detenido", "bot_pid": ""})
+            except Exception:
+                pass
+
     try:
 
         # ── Cola de publicación ────────────────────────────────────────────
@@ -251,11 +258,13 @@ def main():
                 fin_h = h_fin_override or h_fin_cfg
                 fin_m = 0 if h_fin_override else m_fin_cfg
                 logger.info(f"Fuera de la ventana horaria {h_ini:02d}:{m_ini:02d}-{fin_h:02d}:{fin_m:02d}. Saliendo.")
+                _señalar_detenido()
                 return 0
 
             cola = cola_a_publicar(spreadsheet, args.ciudad)
             if not cola:
                 logger.info(f"Cola vacía para {args.ciudad}. Nada que publicar.")
+                _señalar_detenido()
                 return 0
 
             evento = cola[0]
@@ -277,9 +286,11 @@ def main():
 
             publicados += 1
             if args.una_sola:
+                _señalar_detenido()
                 return 0
             if args.n and publicados >= args.n:
                 logger.info(f"Alcancé el límite de {args.n} publicaciones.")
+                _señalar_detenido()
                 return 0
 
             delay = args.intervalo if args.intervalo else random.uniform(intervalo_min, intervalo_max)

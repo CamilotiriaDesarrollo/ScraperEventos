@@ -104,16 +104,27 @@ def main():
         canal_state[ciudad] = activo
         corriendo = _pid_corriendo(pid)
 
-        if comando == "arrancar":
+        def _iniciar_bot():
+            proc = subprocess.Popen(
+                [PYTHON, BOT, "--canal", ciudad, "--ciudad", ciudad],
+                cwd=str(BASE_DIR),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return proc.pid
+
+        if comando == "detener":
+            if corriendo:
+                _matar(pid)
+            corriendo = False
+            pid = ""
+            ws.update_cell(idx, col("comando"), "")
+            ws.update_cell(idx, col("bot_pid"), "")
+
+        elif comando == "arrancar":
             if not corriendo and activo:
-                proc = subprocess.Popen(
-                    [PYTHON, BOT, "--canal", ciudad, "--ciudad", ciudad],
-                    cwd=str(BASE_DIR),
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                pid = proc.pid
+                pid = _iniciar_bot()
                 corriendo = True
                 logger.info(f"Bot {ciudad} iniciado PID={pid}")
             elif corriendo:
@@ -123,13 +134,12 @@ def main():
             ws.update_cell(idx, col("comando"), "")
             ws.update_cell(idx, col("bot_pid"), pid or "")
 
-        elif comando == "detener":
-            if corriendo:
-                _matar(pid)
-            corriendo = False
-            pid = ""
-            ws.update_cell(idx, col("comando"), "")
-            ws.update_cell(idx, col("bot_pid"), "")
+        elif activo and pid > 0 and not corriendo:
+            # Watchdog: hay PID registrado pero el proceso ya no existe — reiniciar
+            logger.warning(f"Watchdog: Bot {ciudad} murió (PID={pid}). Reiniciando...")
+            pid = _iniciar_bot()
+            corriendo = True
+            ws.update_cell(idx, col("bot_pid"), pid)
 
         ws.update_cell(idx, col("bot_estado"), "corriendo" if corriendo else "detenido")
 
