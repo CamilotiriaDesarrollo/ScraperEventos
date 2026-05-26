@@ -62,7 +62,9 @@ def generar_caption(evento):
     lugar = (evento.get("lugar") or "").strip()
     ciudad = (evento.get("ciudad") or "").strip()
     desc = (evento.get("descripcion") or "").strip()
-    notas = (evento.get("notas") or "").strip()
+    notas_raw = (evento.get("notas") or "").strip()
+    # Las notas de curaduría son internas — no van al canal
+    notas = "" if notas_raw.startswith("[CURADURIA]") else notas_raw
     url = (evento.get("url_post") or "").strip()
 
     lineas = []

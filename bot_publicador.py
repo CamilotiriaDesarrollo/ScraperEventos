@@ -168,7 +168,7 @@ def main():
     import os
     log_dir = os.path.join(os.path.dirname(__file__), "logs")
     os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, f"bot_{args.ciudad.lower()}_{datetime.now().strftime('%Y%m%d')}.log")
+    log_file = os.path.join(log_dir, f"bot_{_norm(args.ciudad)}_{datetime.now().strftime('%Y%m%d')}.log")
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
